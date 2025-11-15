@@ -79,13 +79,60 @@ router.post('/create', async (req, res) => {
       const searchStart = new Date(eventStartDate.getTime() - 24 * 60 * 60 * 1000);
       const searchEnd = new Date(eventStartDate.getTime() + 24 * 60 * 60 * 1000);
 
-      const existingEvents = await Event.find({
-        User_Email: email,
-        Event_Start_Date: {
-          $gte: searchStart,
-          $lte: searchEnd
-        }
-      });
+      // IMPORTANT: Get events from Google Calendar (source of truth)
+      // Then enrich with metadata from MongoDB
+      const calendarResult = await getCalendarEvents(
+        user.OAuth_Token,
+        searchStart.toISOString(),
+        searchEnd.toISOString()
+      );
+
+      if (!calendarResult.success) {
+        console.warn('Failed to fetch calendar events for conflict check, falling back to MongoDB');
+        // Fallback to MongoDB if Calendar API fails
+        var existingEvents = await Event.find({
+          User_Email: email,
+          Event_Start_Date: {
+            $gte: searchStart,
+            $lte: searchEnd
+          }
+        });
+      } else {
+        // Get GCal event IDs
+        const gcalEventIds = calendarResult.events.map(e => e.id).filter(id => id);
+        
+        // Get corresponding MongoDB records for metadata
+        const dbEvents = await Event.find({
+          User_Email: email,
+          GCal_Event_ID: { $in: gcalEventIds }
+        });
+        
+        // Create a map of GCal ID -> MongoDB event for quick lookup
+        const dbEventMap = new Map();
+        dbEvents.forEach(e => {
+          if (e.GCal_Event_ID) {
+            dbEventMap.set(e.GCal_Event_ID, e);
+          }
+        });
+        
+        // Use Google Calendar events (for real-time accuracy)
+        // Enriched with MongoDB metadata (for conflict logic)
+        var existingEvents = calendarResult.events.map(gcalEvent => {
+          const dbEvent = dbEventMap.get(gcalEvent.id);
+          
+          return {
+            Event_Start_Date: new Date(gcalEvent.start.dateTime || gcalEvent.start.date),
+            Event_End_Date: new Date(gcalEvent.end.dateTime || gcalEvent.end.date),
+            Event_Name: gcalEvent.summary || 'Untitled Event',
+            Event_Priority: dbEvent?.Event_Priority || 2,
+            Event_Flexibility: dbEvent?.Event_Flexibility || 'Busy',
+            Event_Type: dbEvent?.Event_Type || 'other',
+            Event_Guests: gcalEvent.attendees || [],
+            GCal_Event_ID: gcalEvent.id,
+            ID: dbEvent?.ID
+          };
+        });
+      }
 
       const formattedNewEvent = {
         Event_Start_Date: eventData.startDateTime,
@@ -204,6 +251,26 @@ router.post('/sync', async (req, res) => {
     const gcalEvents = calendarResult.events;
     const syncedEvents = [];
     const newEvents = [];
+    const deletedEvents = [];
+
+    // Get all Google Calendar event IDs
+    const gcalEventIds = new Set(gcalEvents.map(e => e.id).filter(id => id));
+
+    // Find events in MongoDB that no longer exist in Google Calendar
+    const allDbEvents = await Event.find({ User_Email: email });
+    
+    for (const dbEvent of allDbEvents) {
+      if (dbEvent.GCal_Event_ID && !gcalEventIds.has(dbEvent.GCal_Event_ID)) {
+        // This event was deleted from Google Calendar
+        await Event.deleteOne({ _id: dbEvent._id });
+        deletedEvents.push({
+          id: dbEvent.ID,
+          name: dbEvent.Event_Name,
+          gcalId: dbEvent.GCal_Event_ID
+        });
+        console.log(`🗑️ Removed deleted event from DB: ${dbEvent.Event_Name}`);
+      }
+    }
 
     // Process each calendar event
     for (const gcalEvent of gcalEvents) {
@@ -266,9 +333,11 @@ router.post('/sync', async (req, res) => {
       stats: {
         totalCalendarEvents: gcalEvents.length,
         existingEvents: syncedEvents.length,
-        newEvents: newEvents.length
+        newEvents: newEvents.length,
+        deletedEvents: deletedEvents.length
       },
-      newEvents
+      newEvents,
+      deletedEvents
     });
 
   } catch (error) {
