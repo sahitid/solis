@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Solis - Smart Calendar Scheduling</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <!-- Header -->
+  <header class="header">
+    <div class="header-content">
+      <div class="logo">
+        <span class="logo-icon">☀️</span>
+        <h1>Solis</h1>
+      </div>
+      
+      <nav class="nav-tabs">
+        <button class="nav-tab active" onclick="switchTab('home')" id="homeTab">
+          🏠 Home
+        </button>
+        <button class="nav-tab" onclick="switchTab('settings')" id="settingsTab">
+          ⚙️ Settings
+        </button>
+      </nav>
+      
+      <div class="user-section">
+        <!-- Logged out state -->
+        <div id="loggedOutSection" class="logged-out">
+          <button class="btn-primary" onclick="initiateGoogleLogin()">
+            Sign in with Google
+          </button>
+        </div>
+        
+        <!-- Logged in state -->
+        <div id="loggedInSection" class="logged-in" style="display: none;">
+          <div class="user-profile">
+            <div class="user-avatar" id="userAvatar">U</div>
+            <div class="user-info">
+              <span class="user-name" id="userName">User Name</span>
+              <span class="user-email" id="userEmail">user@example.com</span>
+            </div>
+          </div>
+          <button class="btn-secondary" onclick="logout()">Logout</button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content -->
+  <main class="main-content">
+    
+    <!-- HOME TAB -->
+    <div id="home" class="tab-content active">
+      <div class="container">
+        <div class="hero-section">
+          <h2>Smart Calendar Scheduling</h2>
+          <p>Let AI help you manage your calendar intelligently</p>
+        </div>
+        
+        <div class="features-grid">
+          <div class="feature-card">
+            <div class="feature-icon">🤖</div>
+            <h3>AI-Powered Scheduling</h3>
+            <p>Automatically find the best times for your events</p>
+          </div>
+          
+          <div class="feature-card">
+            <div class="feature-icon">⚡</div>
+            <h3>Conflict Resolution</h3>
+            <p>Smart detection and resolution of scheduling conflicts</p>
+          </div>
+          
+          <div class="feature-card">
+            <div class="feature-icon">📧</div>
+            <h3>Email Integration</h3>
+            <p>Automatic reschedule proposals via Gmail</p>
+          </div>
+          
+          <div class="feature-card">
+            <div class="feature-icon">🎯</div>
+            <h3>Flexible Scheduling</h3>
+            <p>Set preferences for how events can be moved</p>
+          </div>
+        </div>
+        
+        <div class="cta-section">
+          <h3>Ready to get started?</h3>
+          <p>Connect your Google Calendar to begin</p>
+          <button class="btn-large" onclick="switchTab('settings')">
+            Get Started →
+          </button>
+        </div>
+      </div>
+    </div>
+    
+    <!-- SETTINGS TAB -->
+    <div id="settings" class="tab-content" style="display: none;">
+      <div class="container">
+        <h2>Settings & Preferences</h2>
+        
+        <!-- Google Account Section -->
+        <section class="settings-section">
+          <div class="section-header">
+            <h3>🔐 Google Account</h3>
+            <p>Connect your Google account to access Calendar and Gmail</p>
+          </div>
+          
+          <div class="account-card" id="accountCard">
+            <!-- Not connected state -->
+            <div id="notConnectedState" class="account-not-connected">
+              <div class="account-icon">📱</div>
+              <h4>No account connected</h4>
+              <p>Sign in with Google to get started</p>
+              <button class="btn-primary" onclick="initiateGoogleLogin()">
+                <span>🔑</span> Connect Google Account
+              </button>
+            </div>
+            
+            <!-- Connected state -->
+            <div id="connectedState" class="account-connected" style="display: none;">
+              <div class="account-info">
+                <div class="account-avatar" id="accountAvatar">U</div>
+                <div class="account-details">
+                  <h4 id="accountName">User Name</h4>
+                  <p id="accountEmail">user@example.com</p>
+                </div>
+              </div>
+              
+              <div class="permissions-status">
+                <h4>Permissions</h4>
+                <div class="permission-item">
+                  <span class="permission-icon" id="calendarStatus">⏳</span>
+                  <span>Google Calendar</span>
+                </div>
+                <div class="permission-item">
+                  <span class="permission-icon" id="gmailStatus">⏳</span>
+                  <span>Gmail</span>
+                </div>
+              </div>
+              
+              <div class="account-actions">
+                <button class="btn-secondary" onclick="reconnectAccount()">
+                  🔄 Reconnect
+                </button>
+                <button class="btn-danger" onclick="disconnectAccount()">
+                  🔌 Disconnect
+                </button>
+              </div>
+            </div>
+          </div>
+        </section>
+        
+        <!-- Onboarding Preferences Section -->
+        <section class="settings-section">
+          <div class="section-header">
+            <h3>⚙️ Preferences</h3>
+            <p>Set your scheduling preferences with AI assistance</p>
+          </div>
+          
+          <div class="preferences-container">
+            <!-- LLM Assistant Panel -->
+            <div class="llm-assistant">
+              <div class="assistant-header">
+                <h4>🤖 AI Assistant</h4>
+                <p>Chat with me to set up your preferences</p>
+              </div>
+              
+              <div class="chat-container" id="chatContainer">
+                <div class="chat-message assistant">
+                  <div class="message-avatar">🤖</div>
+                  <div class="message-content">
+                    <p>Hi! I'm here to help you set up your calendar preferences. Let's start with a few questions:</p>
+                    <p><strong>What are your typical work hours?</strong> For example: "I work Monday to Friday, 9 AM to 5 PM"</p>
+                  </div>
+                </div>
+              </div>
+              
+              <div class="chat-input-container">
+                <textarea 
+                  id="chatInput" 
+                  placeholder="Type your response..."
+                  rows="2"
+                ></textarea>
+                <button class="btn-primary" onclick="sendChatMessage()" id="chatSendBtn">
+                  Send
+                </button>
+              </div>
+            </div>
+            
+            <!-- Manual Preferences Form -->
+            <div class="preferences-form">
+              <h4>📝 Manual Configuration</h4>
+              <p class="form-description">Or set your preferences manually</p>
+              
+              <form id="preferencesForm">
+                <!-- Work Hours -->
+                <div class="form-section">
+                  <h5>Work Hours</h5>
+                  <div class="days-grid">
+                    <div class="day-item" data-day="monday">
+                      <label class="day-checkbox">
+                        <input type="checkbox" name="workDays" value="monday" checked>
+                        <span>Monday</span>
+                      </label>
+                      <input type="time" name="monday-start" value="09:00" class="time-input">
+                      <span>to</span>
+                      <input type="time" name="monday-end" value="17:00" class="time-input">
+                    </div>
+                    
+                    <div class="day-item" data-day="tuesday">
+                      <label class="day-checkbox">
+                        <input type="checkbox" name="workDays" value="tuesday" checked>
+                        <span>Tuesday</span>
+                      </label>
+                      <input type="time" name="tuesday-start" value="09:00" class="time-input">
+                      <span>to</span>
+                      <input type="time" name="tuesday-end" value="17:00" class="time-input">
+                    </div>
+                    
+                    <div class="day-item" data-day="wednesday">
+                      <label class="day-checkbox">
+                        <input type="checkbox" name="workDays" value="wednesday" checked>
+                        <span>Wednesday</span>
+                      </label>
+                      <input type="time" name="wednesday-start" value="09:00" class="time-input">
+                      <span>to</span>
+                      <input type="time" name="wednesday-end" value="17:00" class="time-input">
+                    </div>
+                    
+                    <div class="day-item" data-day="thursday">
+                      <label class="day-checkbox">
+                        <input type="checkbox" name="workDays" value="thursday" checked>
+                        <span>Thursday</span>
+                      </label>
+                      <input type="time" name="thursday-start" value="09:00" class="time-input">
+                      <span>to</span>
+                      <input type="time" name="thursday-end" value="17:00" class="time-input">
+                    </div>
+                    
+                    <div class="day-item" data-day="friday">
+                      <label class="day-checkbox">
+                        <input type="checkbox" name="workDays" value="friday" checked>
+                        <span>Friday</span>
+                      </label>
+                      <input type="time" name="friday-start" value="09:00" class="time-input">
+                      <span>to</span>
+                      <input type="time" name="friday-end" value="17:00" class="time-input">
+                    </div>
+                    
+                    <div class="day-item" data-day="saturday">
+                      <label class="day-checkbox">
+                        <input type="checkbox" name="workDays" value="saturday">
+                        <span>Saturday</span>
+                      </label>
+                      <input type="time" name="saturday-start" value="09:00" class="time-input">
+                      <span>to</span>
+                      <input type="time" name="saturday-end" value="17:00" class="time-input">
+                    </div>
+                    
+                    <div class="day-item" data-day="sunday">
+                      <label class="day-checkbox">
+                        <input type="checkbox" name="workDays" value="sunday">
+                        <span>Sunday</span>
+                      </label>
+                      <input type="time" name="sunday-start" value="09:00" class="time-input">
+                      <span>to</span>
+                      <input type="time" name="sunday-end" value="17:00" class="time-input">
+                    </div>
+                  </div>
+                </div>
+                
+                <!-- Bedtime -->
+                <div class="form-section">
+                  <h5>Bedtime</h5>
+                  <div class="form-row">
+                    <div class="form-group">
+                      <label>Typical Bedtime</label>
+                      <input type="time" name="bedtime" value="22:00">
+                    </div>
+                    <div class="form-group">
+                      <label>Wake Up Time</label>
+                      <input type="time" name="wakeTime" value="07:00">
+                    </div>
+                  </div>
+                </div>
+                
+                <!-- Meeting Windows -->
+                <div class="form-section">
+                  <h5>Preferred Meeting Windows</h5>
+                  <div id="meetingWindows">
+                    <div class="meeting-window-item">
+                      <input type="time" name="meetingWindow-0-start" value="10:00">
+                      <span>to</span>
+                      <input type="time" name="meetingWindow-0-end" value="12:00">
+                      <button type="button" class="btn-icon" onclick="removeMeetingWindow(this)">🗑️</button>
+                    </div>
+                    <div class="meeting-window-item">
+                      <input type="time" name="meetingWindow-1-start" value="14:00">
+                      <span>to</span>
+                      <input type="time" name="meetingWindow-1-end" value="16:00">
+                      <button type="button" class="btn-icon" onclick="removeMeetingWindow(this)">🗑️</button>
+                    </div>
+                  </div>
+                  <button type="button" class="btn-secondary" onclick="addMeetingWindow()">
+                    + Add Window
+                  </button>
+                </div>
+                
+                <!-- No-Meeting Zones -->
+                <div class="form-section">
+                  <h5>No-Meeting Zones</h5>
+                  <div id="noMeetingZones">
+                    <div class="no-meeting-item">
+                      <input type="text" name="noMeeting-0-name" placeholder="e.g., Lunch Break" value="Lunch Break">
+                      <input type="time" name="noMeeting-0-start" value="12:00">
+                      <span>to</span>
+                      <input type="time" name="noMeeting-0-end" value="13:00">
+                      <button type="button" class="btn-icon" onclick="removeNoMeetingZone(this)">🗑️</button>
+                    </div>
+                  </div>
+                  <button type="button" class="btn-secondary" onclick="addNoMeetingZone()">
+                    + Add Zone
+                  </button>
+                </div>
+                
+                <!-- Flexibility Defaults -->
+                <div class="form-section">
+                  <h5>Flexibility Defaults</h5>
+                  <div class="flexibility-grid">
+                    <div class="flexibility-item">
+                      <label>Work Events</label>
+                      <select name="flexibility-work">
+                        <option value="Rigid">Rigid</option>
+                        <option value="Passive">Passive</option>
+                        <option value="Busy" selected>Busy</option>
+                        <option value="Flexible">Flexible</option>
+                      </select>
+                    </div>
+                    
+                    <div class="flexibility-item">
+                      <label>Personal Tasks</label>
+                      <select name="flexibility-personal">
+                        <option value="Rigid">Rigid</option>
+                        <option value="Passive">Passive</option>
+                        <option value="Busy">Busy</option>
+                        <option value="Flexible" selected>Flexible</option>
+                      </select>
+                    </div>
+                    
+                    <div class="flexibility-item">
+                      <label>Meetings</label>
+                      <select name="flexibility-meeting">
+                        <option value="Rigid" selected>Rigid</option>
+                        <option value="Passive">Passive</option>
+                        <option value="Busy">Busy</option>
+                        <option value="Flexible">Flexible</option>
+                      </select>
+                    </div>
+                    
+                    <div class="flexibility-item">
+                      <label>Social Events</label>
+                      <select name="flexibility-social">
+                        <option value="Rigid">Rigid</option>
+                        <option value="Passive">Passive</option>
+                        <option value="Busy" selected>Busy</option>
+                        <option value="Flexible">Flexible</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+                
+                <!-- Save Button -->
+                <div class="form-actions">
+                  <button type="button" class="btn-secondary" onclick="resetPreferences()">
+                    Reset to Defaults
+                  </button>
+                  <button type="submit" class="btn-primary" id="saveBtn">
+                    <span id="saveBtnText">💾 Save Preferences</span>
+                    <span id="saveBtnLoader" class="loader" style="display: none;"></span>
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </section>
+        
+        <!-- Message Area -->
+        <div id="settingsMessage" class="message" style="display: none;"></div>
+      </div>
+    </div>
+    
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
+
