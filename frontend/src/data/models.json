@@ -1,0 +1,108 @@
+{
+  "User": {
+    "Full_Name": "string",
+    "Email": "string",
+    "Bedtime": {
+      "weekday": "string",
+      "weekend": "string"
+    },
+    "OAuth_Token": {
+      "access_token": "string",
+      "refresh_token": "string",
+      "scope": "string",
+      "token_type": "string",
+      "expiry_date": "number"
+    },
+    "GCal_ID": "string",
+    "Work_Hours": {
+      "monday": { "start": "string", "end": "string" },
+      "tuesday": { "start": "string", "end": "string" },
+      "wednesday": { "start": "string", "end": "string" },
+      "thursday": { "start": "string", "end": "string" },
+      "friday": { "start": "string", "end": "string" },
+      "saturday": { "start": "string", "end": "string" },
+      "sunday": { "start": "string", "end": "string" }
+    },
+    "Preferred_Meeting_Windows": [
+      {
+        "day": "string",
+        "start": "string",
+        "end": "string"
+      }
+    ],
+    "No_Meeting_Zones": [
+      {
+        "day": "string",
+        "start": "string",
+        "end": "string",
+        "description": "string"
+      }
+    ],
+    "Flexibility_Defaults": {
+      "personal_tasks": "Rigid | Passive | Busy | Flexible",
+      "work_meetings": "Rigid | Passive | Busy | Flexible",
+      "social_events": "Rigid | Passive | Busy | Flexible"
+    },
+    "Onboarding_Completed": "boolean"
+  },
+  
+  "Event": {
+    "ID": "string",
+    "User_Email": "string",
+    "Event_Name": "string",
+    "Event_Start_Date": "Date",
+    "Event_End_Date": "Date",
+    "Start_Time": "string",
+    "End_Time": "string",
+    "Event_Description": "string",
+    "Event_Priority": "1 | 2 | 3",
+    "Event_Flexibility": "Rigid | Passive | Busy | Flexible",
+    "Event_Type": "work | personal | social | meeting | studying | free | other",
+    "Event_Guests": [
+      {
+        "email": "string",
+        "name": "string",
+        "responseStatus": "accepted | declined | tentative | needsAction"
+      }
+    ],
+    "GCal_Event_ID": "string",
+    "Created_Via": "extension | direct_calendar"
+  },
+  
+  "RescheduleProposal": {
+    "Proposal_ID": "string",
+    "User_Email": "string",
+    "Event_ID": "string",
+    "Event_Name": "string",
+    "Original_Time_Slot": {
+      "startDateTime": "Date",
+      "endDateTime": "Date"
+    },
+    "Proposed_Time_Slot": {
+      "startDateTime": "Date",
+      "endDateTime": "Date"
+    },
+    "Reason": "string",
+    "Attendee_Responses": [
+      {
+        "email": "string",
+        "name": "string",
+        "response": "yes | no | tentative | unclear",
+        "status": "pending | responded",
+        "responseDate": "Date",
+        "responseText": "string"
+      }
+    ],
+    "Email_Sent": "boolean",
+    "Proposal_Status": "pending | approved | rejected | mixed | expired | cancelled",
+    "Majority_Vote_Result": {
+      "yesCount": "number",
+      "noCount": "number",
+      "hasMajority": "boolean",
+      "decision": "string"
+    },
+    "Expires_At": "Date",
+    "Finalized": "boolean"
+  }
+}
+

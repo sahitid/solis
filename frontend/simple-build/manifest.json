@@ -1,0 +1,24 @@
+{
+  "manifest_version": 3,
+  "name": "Solis - AI Calendar Assistant",
+  "version": "1.0.0",
+  "description": "Smart calendar scheduling with AI",
+  "permissions": [
+    "identity",
+    "storage"
+  ],
+  "host_permissions": [
+    "http://localhost:5000/*",
+    "https://www.googleapis.com/*"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Solis Calendar"
+  },
+  "icons": {
+    "16": "icon.png",
+    "48": "icon.png",
+    "128": "icon.png"
+  }
+}
+

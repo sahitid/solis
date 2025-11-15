@@ -1,0 +1,228 @@
+/**
+ * Solo Reschedule Modal Styles
+ */
+
+.reschedule-modal .modal-content {
+  min-height: 400px;
+}
+
+.event-summary {
+  padding: var(--spacing-lg);
+  background: var(--notion-secondary-bg);
+  border-radius: var(--radius-md);
+  margin-bottom: var(--spacing-xl);
+}
+
+.event-summary h3 {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--notion-text);
+  margin-bottom: var(--spacing-sm);
+}
+
+.current-time {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  font-size: 14px;
+  color: var(--notion-text-secondary);
+}
+
+.current-time .label {
+  font-weight: 500;
+}
+
+.current-time .time {
+  color: var(--notion-text);
+}
+
+/* Loading Section */
+.loading-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--spacing-xxl);
+  gap: var(--spacing-md);
+}
+
+.loading-section .spinner {
+  width: 32px;
+  height: 32px;
+  border-width: 3px;
+}
+
+.loading-section p {
+  color: var(--notion-text-secondary);
+  font-size: 14px;
+}
+
+/* Time Slots Section */
+.time-slots-section,
+.alternative-days-section {
+  margin-bottom: var(--spacing-lg);
+}
+
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--spacing-lg);
+}
+
+.section-header h4 {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--notion-text);
+}
+
+.link-button {
+  background: transparent;
+  color: var(--primary);
+  padding: var(--spacing-xs) var(--spacing-md);
+  font-size: 13px;
+  text-decoration: underline;
+}
+
+.link-button:hover:not(:disabled) {
+  background: #e7f3ff;
+  transform: none;
+}
+
+.no-slots {
+  text-align: center;
+  padding: var(--spacing-xl);
+  color: var(--notion-text-secondary);
+  font-size: 14px;
+}
+
+/* Slots List */
+.slots-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.slot-card {
+  padding: var(--spacing-lg);
+  background: var(--notion-bg);
+  border: 2px solid var(--notion-border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.slot-card:hover {
+  border-color: var(--primary);
+  box-shadow: var(--shadow-sm);
+}
+
+.slot-card.selected {
+  border-color: var(--primary);
+  background: #e7f3ff;
+  box-shadow: var(--shadow-md);
+}
+
+.slot-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--spacing-sm);
+}
+
+.slot-time {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--notion-text);
+}
+
+.slot-time .icon {
+  font-size: 16px;
+}
+
+.score-badge {
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.score-badge.score-0,
+.score-badge.score-1 {
+  background: #ffe4e6;
+  color: var(--error);
+}
+
+.score-badge.score-2,
+.score-badge.score-3 {
+  background: #fff4e6;
+  color: var(--yellow);
+}
+
+.score-badge.score-4,
+.score-badge.score-5 {
+  background: #e6f4f1;
+  color: var(--success);
+}
+
+.slot-reason {
+  font-size: 13px;
+  color: var(--notion-text-secondary);
+  line-height: 1.5;
+}
+
+/* Alternative Days */
+.alternatives-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-lg);
+}
+
+.day-card {
+  padding: var(--spacing-lg);
+  background: var(--notion-secondary-bg);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--notion-border);
+}
+
+.day-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--spacing-md);
+  padding-bottom: var(--spacing-md);
+  border-bottom: 1px solid var(--notion-border);
+}
+
+.day-header h5 {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--notion-text);
+}
+
+.day-slots {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--spacing-sm);
+}
+
+.day-slots .slot-card {
+  padding: var(--spacing-md);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.day-slots .slot-time {
+  font-size: 13px;
+}
+
+.slot-score {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--success);
+}
+

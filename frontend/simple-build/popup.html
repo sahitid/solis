@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Solis</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      width: 500px;
+      min-height: 600px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #ffffff;
+      color: #37352f;
+    }
+    
+    .header {
+      background: #f7f6f3;
+      padding: 16px 20px;
+      border-bottom: 1px solid #e9e9e7;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    
+    .logo {
+      font-size: 20px;
+      font-weight: 700;
+    }
+    
+    .tabs {
+      display: flex;
+      gap: 8px;
+      background: #f7f6f3;
+      padding: 12px 20px;
+      border-bottom: 1px solid #e9e9e7;
+    }
+    
+    .tab {
+      padding: 8px 16px;
+      border: none;
+      background: transparent;
+      cursor: pointer;
+      border-radius: 4px;
+      font-size: 14px;
+      font-weight: 500;
+    }
+    
+    .tab.active {
+      background: #ffffff;
+    }
+    
+    .content {
+      padding: 24px 20px;
+    }
+    
+    .tab-content {
+      display: none;
+    }
+    
+    .tab-content.active {
+      display: block;
+    }
+    
+    .input-section {
+      margin-bottom: 20px;
+    }
+    
+    textarea {
+      width: 100%;
+      min-height: 100px;
+      padding: 12px;
+      border: 1px solid #e9e9e7;
+      border-radius: 6px;
+      font-family: inherit;
+      font-size: 14px;
+      resize: vertical;
+    }
+    
+    button {
+      padding: 10px 20px;
+      background: #2383e2;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 500;
+      margin-top: 12px;
+    }
+    
+    button:hover {
+      background: #1a6bb8;
+    }
+    
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    
+    .message {
+      padding: 12px;
+      border-radius: 6px;
+      margin-top: 12px;
+      font-size: 14px;
+    }
+    
+    .success {
+      background: #e6f4f1;
+      color: #0f7b6c;
+      border: 1px solid #b3e0d6;
+    }
+    
+    .error {
+      background: #fbe4e4;
+      color: #e03e3e;
+      border: 1px solid #f5c2c2;
+    }
+    
+    .login-section {
+      text-align: center;
+      padding: 40px 20px;
+    }
+    
+    .login-section h2 {
+      font-size: 24px;
+      margin-bottom: 16px;
+    }
+    
+    .login-section p {
+      color: #787774;
+      margin-bottom: 24px;
+    }
+    
+    .user-info {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    
+    .avatar {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #2383e2, #9065b0);
+      color: white;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 600;
+    }
+    
+    .parsed-event {
+      background: #f7f6f3;
+      padding: 16px;
+      border-radius: 6px;
+      margin-top: 16px;
+    }
+    
+    .parsed-event h3 {
+      margin-bottom: 12px;
+    }
+    
+    .event-field {
+      margin-bottom: 8px;
+      font-size: 14px;
+    }
+    
+    .event-field strong {
+      color: #787774;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="logo">☀️ Solis</div>
+    <div class="user-info" id="userInfo" style="display: none;">
+      <div class="avatar" id="userAvatar"></div>
+      <span id="userName"></span>
+    </div>
+  </div>
+  
+  <div class="tabs">
+    <button class="tab active" onclick="switchTab('home')">🏠 Home</button>
+    <button class="tab" onclick="switchTab('settings')">⚙️ Settings</button>
+  </div>
+  
+  <div class="content">
+    <!-- Home Tab -->
+    <div id="home" class="tab-content active">
+      <h2 style="margin-bottom: 16px;">Add New Event</h2>
+      
+      <div class="input-section">
+        <textarea 
+          id="eventInput" 
+          placeholder='Type naturally like "Coffee with John tomorrow at 3pm"'
+        ></textarea>
+        <button onclick="parseEvent()" id="parseBtn">🤖 Parse Event</button>
+      </div>
+      
+      <div id="parsedEventSection"></div>
+      <div id="message"></div>
+    </div>
+    
+    <!-- Settings Tab -->
+    <div id="settings" class="tab-content">
+      <div class="login-section">
+        <h2>Connect Google Calendar</h2>
+        <p>Sign in to start using Solis</p>
+        <button onclick="login()">Connect with Google</button>
+        <div id="settingsMessage"></div>
+      </div>
+    </div>
+  </div>
+  
+  <script src="popup.js"></script>
+</body>
+</html>
+

@@ -1,0 +1,62 @@
+/**
+ * Home Page Styles
+ */
+
+.home-container {
+  padding: var(--spacing-xl);
+}
+
+/* Welcome Section */
+.welcome-section {
+  max-width: 480px;
+  margin: 0 auto;
+  text-align: center;
+  padding: var(--spacing-xxl) 0;
+}
+
+.welcome-section h1 {
+  font-size: 32px;
+  font-weight: 700;
+  color: var(--notion-text);
+  margin-bottom: var(--spacing-md);
+}
+
+.welcome-section > p {
+  font-size: 16px;
+  color: var(--notion-text-secondary);
+  margin-bottom: var(--spacing-xl);
+}
+
+.features-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+  margin-bottom: var(--spacing-xl);
+  text-align: left;
+}
+
+.feature-item {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  padding: var(--spacing-md);
+  background: var(--notion-secondary-bg);
+  border-radius: var(--radius-md);
+  font-size: 14px;
+}
+
+.feature-icon {
+  font-size: 24px;
+  flex-shrink: 0;
+}
+
+.connect-prompt {
+  padding: var(--spacing-lg);
+  background: #e7f3ff;
+  color: var(--primary);
+  border-radius: var(--radius-md);
+  font-size: 14px;
+  font-weight: 500;
+  border: 1px solid #b3d9ff;
+}
+

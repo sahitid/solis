@@ -1,0 +1,41 @@
+{
+  "name": "solis-frontend",
+  "version": "1.0.0",
+  "description": "Solis Chrome Extension Frontend",
+  "private": true,
+  "scripts": {
+    "start": "react-scripts start",
+    "build": "react-scripts build && npm run build:extension",
+    "build:extension": "node scripts/build-extension.js",
+    "test": "react-scripts test",
+    "eject": "react-scripts eject"
+  },
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-scripts": "5.0.1",
+    "axios": "^1.6.0",
+    "date-fns": "^2.30.0"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.0.254",
+    "@types/node": "^20.0.0",
+    "@types/react": "^18.2.0",
+    "@types/react-dom": "^18.2.0",
+    "typescript": "^4.9.5",
+    "fs-extra": "^11.0.0"
+  },
+  "eslintConfig": {
+    "extends": [
+      "react-app"
+    ]
+  },
+  "browserslist": {
+    "production": [
+      "chrome >= 90"
+    ],
+    "development": [
+      "last 1 chrome version"
+    ]
+  }
+}

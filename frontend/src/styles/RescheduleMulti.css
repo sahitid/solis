@@ -1,0 +1,230 @@
+/**
+ * Multi-Attendee Reschedule Modal Styles
+ */
+
+.reschedule-multi-modal .event-summary {
+  padding: var(--spacing-lg);
+  background: var(--notion-secondary-bg);
+  border-radius: var(--radius-md);
+  margin-bottom: var(--spacing-xl);
+}
+
+.attendees-info {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  font-size: 14px;
+  color: var(--notion-text-secondary);
+  margin-bottom: var(--spacing-md);
+}
+
+.attendees-info .icon {
+  font-size: 16px;
+}
+
+.info-box {
+  padding: var(--spacing-lg);
+  background: #e7f3ff;
+  border-radius: var(--radius-md);
+  border: 1px solid #b3d9ff;
+  margin-top: var(--spacing-lg);
+}
+
+.info-box p {
+  font-size: 13px;
+  color: var(--notion-text-secondary);
+  line-height: 1.6;
+  margin-bottom: var(--spacing-sm);
+}
+
+.info-box p:last-child {
+  margin-bottom: 0;
+}
+
+/* Proposal Status Modal */
+.proposal-status-modal .modal-content {
+  min-height: 350px;
+}
+
+.proposal-summary {
+  padding: var(--spacing-lg);
+  background: var(--notion-secondary-bg);
+  border-radius: var(--radius-md);
+  margin-bottom: var(--spacing-xl);
+}
+
+.proposal-summary h3 {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--notion-text);
+  margin-bottom: var(--spacing-md);
+}
+
+.proposed-time {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.proposed-time .label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--notion-text-secondary);
+}
+
+.proposed-time .time {
+  font-size: 14px;
+  color: var(--notion-text);
+  font-weight: 500;
+}
+
+/* Status Card */
+.status-card {
+  padding: var(--spacing-xl);
+  border-radius: var(--radius-md);
+  text-align: center;
+  margin-bottom: var(--spacing-xl);
+}
+
+.status-card.status-pending {
+  background: #fff4e6;
+  border: 2px solid var(--yellow);
+}
+
+.status-card.status-approved {
+  background: #e6f4f1;
+  border: 2px solid var(--success);
+}
+
+.status-card.status-rejected {
+  background: #fbe4e4;
+  border: 2px solid var(--error);
+}
+
+.status-icon {
+  font-size: 48px;
+  margin-bottom: var(--spacing-md);
+}
+
+.status-card h4 {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--notion-text);
+}
+
+/* Vote Summary */
+.vote-summary {
+  margin-bottom: var(--spacing-xl);
+}
+
+.vote-bar {
+  height: 12px;
+  background: var(--notion-border);
+  border-radius: 6px;
+  overflow: hidden;
+  display: flex;
+  margin-bottom: var(--spacing-md);
+}
+
+.vote-bar-accept {
+  background: var(--success);
+  transition: width 0.3s ease;
+}
+
+.vote-bar-reject {
+  background: var(--error);
+  transition: width 0.3s ease;
+}
+
+.vote-counts {
+  display: flex;
+  gap: var(--spacing-xl);
+  justify-content: center;
+}
+
+.vote-count {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.vote-count.accept {
+  color: var(--success);
+}
+
+.vote-count.reject {
+  color: var(--error);
+}
+
+.vote-count.pending {
+  color: var(--notion-text-secondary);
+}
+
+.vote-count .icon {
+  font-size: 16px;
+}
+
+/* Responses List */
+.responses-list {
+  padding: var(--spacing-lg);
+  background: var(--notion-secondary-bg);
+  border-radius: var(--radius-md);
+  margin-bottom: var(--spacing-lg);
+}
+
+.responses-list h4 {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--notion-text);
+  margin-bottom: var(--spacing-md);
+}
+
+.response-item {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  padding: var(--spacing-md);
+  background: var(--notion-bg);
+  border-radius: var(--radius-sm);
+  margin-bottom: var(--spacing-sm);
+  font-size: 13px;
+}
+
+.response-item:last-child {
+  margin-bottom: 0;
+}
+
+.response-item.accept {
+  border-left: 3px solid var(--success);
+}
+
+.response-item.reject {
+  border-left: 3px solid var(--error);
+}
+
+.response-item .icon {
+  font-size: 16px;
+  font-weight: bold;
+}
+
+.response-item.accept .icon {
+  color: var(--success);
+}
+
+.response-item.reject .icon {
+  color: var(--error);
+}
+
+.response-item .email {
+  flex: 1;
+  color: var(--notion-text);
+  font-weight: 500;
+}
+
+.response-item .time {
+  color: var(--notion-text-light);
+  font-size: 12px;
+}
+

@@ -1,0 +1,291 @@
+/**
+ * Conflict Modal Styles
+ */
+
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(15, 15, 15, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.modal-container {
+  background: var(--notion-bg);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  max-width: 560px;
+  width: 90%;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  animation: slideUp 0.2s ease;
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--spacing-xl);
+  border-bottom: 1px solid var(--notion-border);
+}
+
+.modal-header h2 {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--notion-text);
+}
+
+.close-button {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--notion-text-secondary);
+  font-size: 24px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.close-button:hover {
+  background: var(--notion-secondary-bg);
+  transform: none;
+}
+
+.modal-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--spacing-xl);
+}
+
+.modal-content::-webkit-scrollbar {
+  width: 8px;
+}
+
+.modal-content::-webkit-scrollbar-thumb {
+  background: var(--notion-border);
+  border-radius: 4px;
+}
+
+.modal-actions {
+  display: flex;
+  gap: var(--spacing-md);
+  padding: var(--spacing-lg) var(--spacing-xl);
+  border-top: 1px solid var(--notion-border);
+  justify-content: flex-end;
+}
+
+.action-button {
+  padding: var(--spacing-md) var(--spacing-xl);
+  font-weight: 500;
+  border-radius: var(--radius-sm);
+}
+
+.action-button.primary {
+  background: var(--primary);
+  color: white;
+}
+
+.action-button.primary:hover:not(:disabled) {
+  background: var(--primary-hover);
+}
+
+.action-button.secondary {
+  background: transparent;
+  color: var(--notion-text-secondary);
+  border: 1px solid var(--notion-border);
+}
+
+.action-button.secondary:hover:not(:disabled) {
+  background: var(--notion-secondary-bg);
+}
+
+.action-button.warning {
+  background: var(--warning);
+  color: white;
+}
+
+.action-button.warning:hover:not(:disabled) {
+  background: #c14d10;
+}
+
+/* Conflict Modal Specific */
+.conflict-message {
+  font-size: 15px;
+  color: var(--notion-text-secondary);
+  margin-bottom: var(--spacing-xl);
+}
+
+.events-comparison {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-lg);
+  margin-bottom: var(--spacing-xl);
+}
+
+.conflict-arrow {
+  font-size: 24px;
+  color: var(--notion-text-light);
+  flex-shrink: 0;
+}
+
+.event-card {
+  flex: 1;
+  padding: var(--spacing-lg);
+  border-radius: var(--radius-md);
+  border: 2px solid;
+}
+
+.event-card.new-event {
+  background: #e7f3ff;
+  border-color: var(--blue);
+}
+
+.event-card.existing-event {
+  background: #fef3f2;
+  border-color: var(--warning);
+}
+
+.event-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--spacing-sm);
+}
+
+.event-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--notion-text-secondary);
+}
+
+.event-card h3 {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--notion-text);
+  margin-bottom: var(--spacing-md);
+}
+
+.event-time {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  font-size: 13px;
+  color: var(--notion-text-secondary);
+  margin-bottom: var(--spacing-md);
+}
+
+.event-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-sm);
+}
+
+.priority-badge,
+.flexibility-badge,
+.category-badge,
+.attendees-badge {
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.priority-badge.priority-1 {
+  background: #e3e2e0;
+  color: var(--notion-text-secondary);
+}
+
+.priority-badge.priority-2 {
+  background: #fff4e6;
+  color: var(--yellow);
+}
+
+.priority-badge.priority-3 {
+  background: #ffe4e6;
+  color: var(--error);
+}
+
+.flexibility-badge {
+  background: var(--notion-secondary-bg);
+  color: var(--notion-text);
+  text-transform: capitalize;
+}
+
+.category-badge {
+  background: #eee;
+  color: var(--notion-text);
+  text-transform: capitalize;
+}
+
+.attendees-badge {
+  background: #f0e7ff;
+  color: var(--purple);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Recommendation Box */
+.recommendation-box {
+  padding: var(--spacing-lg);
+  background: var(--notion-secondary-bg);
+  border-radius: var(--radius-md);
+  border-left: 3px solid var(--primary);
+  margin-bottom: var(--spacing-lg);
+}
+
+.recommendation-box h4 {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--notion-text);
+  margin-bottom: var(--spacing-sm);
+}
+
+.recommendation-box p {
+  font-size: 13px;
+  color: var(--notion-text-secondary);
+  margin-bottom: var(--spacing-xs);
+}
+
+.recommendation-action {
+  font-style: italic;
+}
+
+/* Additional Conflicts */
+.additional-conflicts {
+  padding: var(--spacing-md);
+  background: #fff4e6;
+  border-radius: var(--radius-md);
+  text-align: center;
+  font-size: 13px;
+  color: var(--warning);
+  font-weight: 500;
+}
+
