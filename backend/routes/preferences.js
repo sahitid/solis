@@ -6,11 +6,11 @@ const { GoogleGenerativeAI } = require('@google/generative-ai');
 // Initialize Google Gemini client
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
-// @route   GET /api/preferences/:email
+// @route   GET /api/preferences
 // @desc    Get user preferences
 // @access  Private
-router.get('/:email', async (req, res) => {
-  const { email } = req.params;
+router.get('/', async (req, res) => {
+  const { email } = req.query;
 
   try {
     const user = await User.findOne({ Email: email });
@@ -58,6 +58,9 @@ router.put('/:email', async (req, res) => {
       return res.status(404).json({ error: 'User not found' });
     }
 
+    // Track if this is first-time onboarding completion
+    const wasOnboardingIncomplete = !user.Onboarding_Completed;
+
     // Update preferences
     if (workHours) user.Work_Hours = workHours;
     if (bedtime) user.Bedtime = bedtime;
@@ -68,9 +71,16 @@ router.put('/:email', async (req, res) => {
 
     await user.save();
 
+    // Log onboarding completion
+    if (wasOnboardingIncomplete && user.Onboarding_Completed) {
+      console.log(`✅ User ${email} completed onboarding!`);
+    }
+
     res.json({
       success: true,
-      message: 'Preferences updated successfully',
+      message: user.Onboarding_Completed && wasOnboardingIncomplete 
+        ? 'Onboarding completed! Preferences saved successfully.'
+        : 'Preferences updated successfully',
       preferences: {
         workHours: user.Work_Hours,
         bedtime: user.Bedtime,
@@ -78,7 +88,8 @@ router.put('/:email', async (req, res) => {
         noMeetingZones: user.No_Meeting_Zones,
         flexibilityDefaults: user.Flexibility_Defaults,
         onboardingCompleted: user.Onboarding_Completed
-      }
+      },
+      onboardingJustCompleted: wasOnboardingIncomplete && user.Onboarding_Completed
     });
 
   } catch (error) {

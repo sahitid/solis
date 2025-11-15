@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Solis</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <!-- Login Screen (shown when not authenticated) -->
+  <div id="loginScreen" class="screen">
+    <div class="login-container">
+      <div class="logo">☀️</div>
+      <h1>Solis</h1>
+      <p class="subtitle">Smart Calendar Scheduling</p>
+      <button id="loginBtn" class="btn-primary">
+        <span class="icon">🔐</span>
+        Sign in with Google
+      </button>
+      <p class="helper-text">Connect your Google Calendar to get started</p>
+    </div>
+  </div>
+
+  <!-- Main App Screen (shown when authenticated) -->
+  <div id="appScreen" class="screen" style="display: none;">
+    <div class="header">
+      <div class="user-info">
+        <div class="user-avatar" id="userAvatar">U</div>
+        <div class="user-details">
+          <div class="user-name" id="userName">User</div>
+          <div class="user-email" id="userEmail">user@example.com</div>
+        </div>
+      </div>
+      <button id="logoutBtn" class="btn-icon" title="Logout">🚪</button>
+    </div>
+
+    <div class="content">
+      <h2>Add New Event</h2>
+      
+      <form id="eventForm">
+        <div class="form-group">
+          <label for="eventName">Event Name *</label>
+          <input type="text" id="eventName" placeholder="e.g., Coffee with John" required>
+        </div>
+        
+        <div class="form-row">
+          <div class="form-group">
+            <label for="startDate">Start Date *</label>
+            <input type="date" id="startDate" required>
+          </div>
+          <div class="form-group">
+            <label for="startTime">Start Time *</label>
+            <input type="time" id="startTime" required>
+          </div>
+        </div>
+        
+        <div class="form-row">
+          <div class="form-group">
+            <label for="endDate">End Date *</label>
+            <input type="date" id="endDate" required>
+          </div>
+          <div class="form-group">
+            <label for="endTime">End Time *</label>
+            <input type="time" id="endTime" required>
+          </div>
+        </div>
+        
+        <div class="form-group">
+          <label for="eventDescription">Description</label>
+          <textarea id="eventDescription" rows="2" placeholder="Add details..."></textarea>
+        </div>
+        
+        <div class="form-group">
+          <label for="eventFlexibility">Flexibility *</label>
+          <select id="eventFlexibility" required>
+            <option value="">Select flexibility...</option>
+            <option value="Rigid">🔒 Rigid - Can't move or overlap</option>
+            <option value="Passive">👀 Passive - Can overlap, can't move</option>
+            <option value="Busy">⚡ Busy - Can move, can't overlap</option>
+            <option value="Flexible">✨ Flexible - Can move and overlap</option>
+          </select>
+        </div>
+        
+        <div class="form-group">
+          <label for="eventGuests">Guests (Email addresses)</label>
+          <input type="text" id="eventGuests" placeholder="email@example.com, another@example.com">
+          <small>Separate multiple emails with commas</small>
+        </div>
+        
+        <div class="form-actions">
+          <button type="button" class="btn-secondary" id="cancelBtn">Cancel</button>
+          <button type="submit" class="btn-primary" id="submitBtn">
+            <span id="submitText">Add to Calendar</span>
+            <span id="submitLoader" class="loader" style="display: none;"></span>
+          </button>
+        </div>
+      </form>
+      
+      <div id="message" class="message" style="display: none;"></div>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
+

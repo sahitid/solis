@@ -2,29 +2,137 @@ const express = require('express');
 const router = express.Router();
 const { google } = require('googleapis');
 const User = require('../models/User');
-const { oauth2Client, getAuthUrl, getAuthenticatedClient } = require('../config/google');
+const { oauth2Client, getAuthUrl } = require('../config/google');
 
-// @route   GET /api/auth/google
-// @desc    Get Google OAuth URL
+// @route   GET /api/auth/url
+// @desc    Get Google OAuth URL for extension
 // @access  Public
-router.get('/google', (req, res) => {
+router.get('/url', (req, res) => {
   try {
-    const authUrl = getAuthUrl();
-    res.json({ authUrl });
+    const url = getAuthUrl();
+    res.json({ success: true, url });
   } catch (error) {
     console.error('Error generating auth URL:', error);
-    res.status(500).json({ error: 'Failed to generate authentication URL' });
+    res.status(500).json({ success: false, error: 'Failed to generate authentication URL' });
   }
 });
 
-// @route   POST /api/auth/google/callback
+// @route   GET /api/auth/callback
 // @desc    Handle Google OAuth callback
 // @access  Public
-router.post('/google/callback', async (req, res) => {
-  const { code } = req.body;
+// @route   GET /api/auth/success
+// @desc    Success page after OAuth (serves HTML that communicates with extension)
+// @access  Public
+router.get('/success', (req, res) => {
+  const { user, error } = req.query;
+  
+  res.send(`
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <title>Solis - Sign In Success</title>
+      <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          min-height: 100vh;
+          color: white;
+        }
+        .container { text-align: center; max-width: 500px; padding: 40px; }
+        .logo { font-size: 80px; margin-bottom: 24px; animation: bounce 1s ease-in-out; }
+        @keyframes bounce {
+          0%, 100% { transform: translateY(0); }
+          50% { transform: translateY(-20px); }
+        }
+        h1 { font-size: 32px; margin-bottom: 16px; }
+        p { font-size: 18px; opacity: 0.9; margin-bottom: 32px; }
+        .status {
+          background: rgba(255, 255, 255, 0.2);
+          padding: 16px 24px;
+          border-radius: 12px;
+          backdrop-filter: blur(10px);
+          margin-bottom: 24px;
+        }
+        .spinner {
+          width: 40px;
+          height: 40px;
+          border: 4px solid rgba(255, 255, 255, 0.3);
+          border-top-color: white;
+          border-radius: 50%;
+          animation: spin 1s linear infinite;
+          margin: 0 auto 16px;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .success-icon { font-size: 48px; margin-bottom: 16px; }
+        .error { background: rgba(255, 0, 0, 0.2); }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="logo">☀️</div>
+        <h1>Solis</h1>
+        
+        <div id="status" class="status">
+          <div class="spinner"></div>
+          <p>Completing sign in...</p>
+        </div>
+      </div>
+      
+      <script>
+        const urlParams = new URLSearchParams(window.location.search);
+        const userDataEncoded = urlParams.get('user');
+        const error = urlParams.get('error');
+        const statusDiv = document.getElementById('status');
+        
+        if (error) {
+          statusDiv.innerHTML = '<div class="success-icon">❌</div><p><strong>Sign in failed</strong></p><p style="font-size: 14px;">Please close this tab and try again.</p>';
+        } else if (userDataEncoded) {
+          try {
+            const userData = JSON.parse(decodeURIComponent(userDataEncoded));
+            
+            // Try to communicate with extension
+            if (chrome && chrome.runtime) {
+              chrome.runtime.sendMessage('${process.env.EXTENSION_ID}', {
+                action: 'authSuccess',
+                userData: userData
+              }, (response) => {
+                if (chrome.runtime.lastError) {
+                  console.log('Extension not listening, saving to localStorage');
+                  localStorage.setItem('solis_user', JSON.stringify(userData));
+                }
+              });
+            }
+            
+            // Also save to localStorage as backup
+            localStorage.setItem('solis_user', JSON.stringify(userData));
+            
+            statusDiv.innerHTML = '<div class="success-icon">✅</div><p><strong>Sign in successful!</strong></p><p style="font-size: 14px;">Click the Solis extension icon to continue.</p><p style="font-size: 12px; margin-top: 16px;">You can close this tab now.</p>';
+            
+            // Auto-close after 5 seconds
+            setTimeout(() => {
+              window.close();
+            }, 5000);
+          } catch (err) {
+            statusDiv.innerHTML = '<div class="success-icon">❌</div><p><strong>Error processing login</strong></p>';
+          }
+        } else {
+          statusDiv.innerHTML = '<div class="success-icon">❌</div><p><strong>No user data received</strong></p>';
+        }
+      </script>
+    </body>
+    </html>
+  `);
+});
+
+router.get('/callback', async (req, res) => {
+  const { code } = req.query;
 
   if (!code) {
-    return res.status(400).json({ error: 'Authorization code is required' });
+    return res.redirect(`http://localhost:5000/api/auth/success?error=no_code`);
   }
 
   try {
@@ -41,6 +149,11 @@ router.post('/google/callback', async (req, res) => {
     const userInfo = await oauth2.userinfo.get();
     const { email, name, id } = userInfo.data;
 
+    // Get calendar ID
+    const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
+    const calendarList = await calendar.calendarList.get({ calendarId: 'primary' });
+    const calendarId = calendarList.data.id;
+
     // Check if user exists
     let user = await User.findOne({ Email: email });
 
@@ -53,14 +166,14 @@ router.post('/google/callback', async (req, res) => {
         token_type: tokens.token_type,
         expiry_date: tokens.expiry_date
       };
-      user.GCal_ID = id;
+      user.GCal_ID = calendarId;
       await user.save();
     } else {
       // Create new user
       user = new User({
         Full_Name: name,
         Email: email,
-        GCal_ID: id,
+        GCal_ID: calendarId,
         OAuth_Token: {
           access_token: tokens.access_token,
           refresh_token: tokens.refresh_token,
@@ -68,126 +181,104 @@ router.post('/google/callback', async (req, res) => {
           token_type: tokens.token_type,
           expiry_date: tokens.expiry_date
         },
-        // Set default work hours (9 AM - 5 PM weekdays)
-        Work_Hours: {
-          monday: { start: '09:00', end: '17:00' },
-          tuesday: { start: '09:00', end: '17:00' },
-          wednesday: { start: '09:00', end: '17:00' },
-          thursday: { start: '09:00', end: '17:00' },
-          friday: { start: '09:00', end: '17:00' },
-          saturday: { start: '', end: '' },
-          sunday: { start: '', end: '' }
-        }
+        Events: []
       });
       await user.save();
     }
 
-    res.json({
-      success: true,
-      user: {
-        email: user.Email,
-        name: user.Full_Name,
-        onboardingCompleted: user.Onboarding_Completed
-      },
-      tokens
-    });
+    console.log(`✅ User authenticated: ${email}`);
+
+    // Redirect to localhost success page with user data
+    const userData = {
+      Full_Name: user.Full_Name,
+      Email: user.Email,
+      GCal_ID: user.GCal_ID,
+      OAuth_Token: user.OAuth_Token
+    };
+
+    const userDataEncoded = encodeURIComponent(JSON.stringify(userData));
+    
+    // Redirect to localhost success page (works with Google OAuth)
+    res.redirect(`http://localhost:5000/api/auth/success?user=${userDataEncoded}`);
 
   } catch (error) {
     console.error('OAuth callback error:', error);
-    res.status(500).json({ error: 'Authentication failed', details: error.message });
+    res.redirect(`http://localhost:5000/api/auth/success?error=auth_failed`);
   }
 });
 
-// @route   POST /api/auth/refresh-token
-// @desc    Refresh access token
-// @access  Private
-router.post('/refresh-token', async (req, res) => {
-  const { email, refreshToken } = req.body;
+// @route   POST /api/auth/register
+// @desc    Register new user from Chrome extension
+// @access  Public
+router.post('/register', async (req, res) => {
+  const { Full_Name, Email, OAuth_Token, GCal_ID, Events } = req.body;
 
-  if (!email || !refreshToken) {
-    return res.status(400).json({ error: 'Email and refresh token are required' });
+  if (!Full_Name || !Email || !OAuth_Token || !GCal_ID) {
+    return res.status(400).json({ 
+      success: false,
+      error: 'Missing required fields: Full_Name, Email, OAuth_Token, GCal_ID' 
+    });
   }
 
   try {
-    const user = await User.findOne({ Email: email });
-    
-    if (!user) {
-      return res.status(404).json({ error: 'User not found' });
+    // Check if user already exists
+    let user = await User.findOne({ Email });
+
+    if (user) {
+      // Update existing user's OAuth token
+      user.OAuth_Token = OAuth_Token;
+      user.Full_Name = Full_Name;
+      user.GCal_ID = GCal_ID;
+      await user.save();
+
+      return res.json({
+        success: true,
+        message: 'User updated successfully',
+        user: {
+          Full_Name: user.Full_Name,
+          Email: user.Email,
+          GCal_ID: user.GCal_ID
+        }
+      });
     }
 
-    // Set refresh token and get new access token
-    oauth2Client.setCredentials({
-      refresh_token: refreshToken
+    // Create new user
+    user = new User({
+      Full_Name,
+      Email,
+      OAuth_Token,
+      GCal_ID,
+      Events: Events || []
     });
 
-    const { credentials } = await oauth2Client.refreshAccessToken();
-
-    // Update user's tokens
-    user.OAuth_Token = {
-      access_token: credentials.access_token,
-      refresh_token: credentials.refresh_token || refreshToken,
-      scope: credentials.scope,
-      token_type: credentials.token_type,
-      expiry_date: credentials.expiry_date
-    };
     await user.save();
+
+    console.log(`✅ New user registered: ${Email}`);
 
     res.json({
       success: true,
-      tokens: credentials
+      message: 'User created successfully',
+      user: {
+        Full_Name: user.Full_Name,
+        Email: user.Email,
+        GCal_ID: user.GCal_ID
+      }
     });
 
   } catch (error) {
-    console.error('Token refresh error:', error);
-    res.status(500).json({ error: 'Failed to refresh token', details: error.message });
+    console.error('Registration error:', error);
+    res.status(500).json({ 
+      success: false,
+      error: 'Failed to register user', 
+      details: error.message 
+    });
   }
 });
 
-// @route   POST /api/auth/logout
-// @desc    Logout user and revoke tokens
-// @access  Private
-router.post('/logout', async (req, res) => {
-  const { email } = req.body;
-
-  if (!email) {
-    return res.status(400).json({ error: 'Email is required' });
-  }
-
-  try {
-    const user = await User.findOne({ Email: email });
-    
-    if (!user) {
-      return res.status(404).json({ error: 'User not found' });
-    }
-
-    // Revoke Google tokens
-    if (user.OAuth_Token && user.OAuth_Token.access_token) {
-      const client = getAuthenticatedClient(user.OAuth_Token);
-      await client.revokeCredentials();
-    }
-
-    // Clear tokens from database
-    user.OAuth_Token = {
-      access_token: '',
-      refresh_token: '',
-      scope: '',
-      token_type: '',
-      expiry_date: 0
-    };
-    await user.save();
-
-    res.json({ success: true, message: 'Logged out successfully' });
-
-  } catch (error) {
-    console.error('Logout error:', error);
-    res.status(500).json({ error: 'Logout failed', details: error.message });
-  }
-});
-
-// @route   GET /api/auth/status
-// @desc    Check authentication status
+// @route   GET /api/auth/user
+// @desc    Get user by email
 // @access  Public
-router.get('/status', async (req, res) => {
+router.get('/user', async (req, res) => {
   const { email } = req.query;
 
   if (!email) {
@@ -195,30 +286,26 @@ router.get('/status', async (req, res) => {
   }
 
   try {
-    const user = await User.findOne({ Email: email });
+    const user = await User.findOne({ Email: email }).populate('Events');
     
     if (!user) {
-      return res.json({ authenticated: false });
+      return res.status(404).json({ error: 'User not found' });
     }
 
-    const isAuthenticated = user.OAuth_Token && 
-                           user.OAuth_Token.access_token && 
-                           user.OAuth_Token.expiry_date > Date.now();
-
     res.json({
-      authenticated: isAuthenticated,
-      onboardingCompleted: user.Onboarding_Completed,
+      success: true,
       user: {
-        name: user.Full_Name,
-        email: user.Email
+        Full_Name: user.Full_Name,
+        Email: user.Email,
+        GCal_ID: user.GCal_ID,
+        Events: user.Events
       }
     });
 
   } catch (error) {
-    console.error('Status check error:', error);
-    res.status(500).json({ error: 'Failed to check status' });
+    console.error('Get user error:', error);
+    res.status(500).json({ error: 'Failed to get user' });
   }
 });
 
 module.exports = router;
-

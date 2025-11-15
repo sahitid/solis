@@ -3,7 +3,6 @@ const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const authRoutes = require('./routes/auth');
-const preferencesRoutes = require('./routes/preferences');
 const eventsRoutes = require('./routes/events');
 const conflictsRoutes = require('./routes/conflicts');
 const rescheduleRoutes = require('./routes/reschedule');
@@ -13,7 +12,14 @@ const app = express();
 
 // Middleware
 app.use(cors({
-  origin: process.env.CLIENT_URL || 'http://localhost:3000',
+  origin: function (origin, callback) {
+    // Allow Chrome extension origins (chrome-extension://...)
+    if (!origin || origin.startsWith('chrome-extension://')) {
+      callback(null, true);
+    } else {
+      callback(null, true); // Allow all for development
+    }
+  },
   credentials: true
 }));
 app.use(express.json());
@@ -31,7 +37,6 @@ mongoose.connect(process.env.MONGO_URI)
 
 // Routes
 app.use('/api/auth', authRoutes);
-app.use('/api/preferences', preferencesRoutes);
 app.use('/api/events', eventsRoutes);
 app.use('/api/conflicts', conflictsRoutes);
 app.use('/api/reschedule', rescheduleRoutes);
