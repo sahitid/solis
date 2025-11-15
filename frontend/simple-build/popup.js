@@ -23,76 +23,129 @@ async function login() {
   }
 }
 
-// Parse event with AI
-async function parseEvent() {
-  const input = document.getElementById('eventInput').value.trim();
+// Handle form submission
+document.getElementById('eventForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  await createEvent();
+});
+
+// Set default dates to today
+function setDefaultDates() {
+  const today = new Date();
+  const tomorrow = new Date(today);
+  tomorrow.setDate(tomorrow.getDate() + 1);
   
-  if (!input) {
-    showMessage('⚠️ Please enter an event description', 'error');
+  const formatDate = (date) => date.toISOString().split('T')[0];
+  
+  document.getElementById('startDate').value = formatDate(today);
+  document.getElementById('endDate').value = formatDate(today);
+  document.getElementById('startTime').value = '09:00';
+  document.getElementById('endTime').value = '10:00';
+}
+
+// Cancel form
+function cancelForm() {
+  document.getElementById('eventForm').reset();
+  setDefaultDates();
+  showMessage('Form cleared', 'success');
+}
+
+// Create event
+async function createEvent() {
+  const submitBtn = document.getElementById('submitBtn');
+  const submitText = document.getElementById('submitText');
+  const submitLoader = document.getElementById('submitLoader');
+  
+  // Get form values
+  const eventName = document.getElementById('eventName').value.trim();
+  const startDate = document.getElementById('startDate').value;
+  const startTime = document.getElementById('startTime').value;
+  const endDate = document.getElementById('endDate').value;
+  const endTime = document.getElementById('endTime').value;
+  const description = document.getElementById('eventDescription').value.trim();
+  const flexibility = document.getElementById('eventFlexibility').value;
+  const guestsInput = document.getElementById('eventGuests').value.trim();
+  
+  // Validate required fields
+  if (!eventName || !startDate || !startTime || !endDate || !endTime || !flexibility) {
+    showMessage('⚠️ Please fill in all required fields', 'error');
     return;
   }
   
-  const parseBtn = document.getElementById('parseBtn');
-  parseBtn.disabled = true;
-  parseBtn.textContent = '🔄 Parsing...';
+  // Parse guests
+  const guests = guestsInput 
+    ? guestsInput.split(',').map(email => ({
+        email: email.trim(),
+        name: email.trim().split('@')[0]
+      }))
+    : [];
+  
+  // Combine date and time
+  const startDateTime = `${startDate}T${startTime}:00`;
+  const endDateTime = `${endDate}T${endTime}:00`;
+  
+  // Validate times
+  if (new Date(endDateTime) <= new Date(startDateTime)) {
+    showMessage('⚠️ End time must be after start time', 'error');
+    return;
+  }
+  
+  // Show loading state
+  submitBtn.disabled = true;
+  submitText.style.display = 'none';
+  submitLoader.style.display = 'block';
   
   try {
-    const response = await fetch(`${API_BASE}/events/parse`, {
+    // Get user email from storage
+    const result = await chrome.storage.local.get(['user']);
+    const userEmail = result.user?.email || 'test@example.com';
+    
+    // Create event data
+    const eventData = {
+      title: eventName,
+      startDateTime: startDateTime,
+      endDateTime: endDateTime,
+      description: description,
+      flexibility: flexibility,
+      attendees: guests,
+      priority: 2, // Default priority
+      category: guests.length > 0 ? 'meeting' : 'personal'
+    };
+    
+    // Call backend API
+    const response = await fetch(`${API_BASE}/events/create`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        userInput: input,
-        email: 'test@example.com' // You can add actual user email from storage
+        email: userEmail,
+        eventData: eventData,
+        skipConflictCheck: false
       })
     });
     
     const data = await response.json();
     
-    if (data.success) {
-      displayParsedEvent(data.event);
-      showMessage('✅ Event parsed successfully!', 'success');
+    if (response.ok && data.success) {
+      showMessage('✅ Event added to your calendar!', 'success');
+      document.getElementById('eventForm').reset();
+      setDefaultDates();
+    } else if (response.status === 409) {
+      // Conflict detected
+      showMessage(`⚠️ Conflict detected with ${data.conflictCount} event(s)! Check your calendar.`, 'error');
+      // In a full implementation, we'd show the conflict modal here
     } else {
-      showMessage('❌ Could not parse event', 'error');
+      showMessage('❌ ' + (data.error || 'Failed to create event'), 'error');
     }
   } catch (error) {
+    console.error('Error creating event:', error);
     showMessage('❌ Error: ' + error.message, 'error');
   } finally {
-    parseBtn.disabled = false;
-    parseBtn.textContent = '🤖 Parse Event';
-  }
-}
-
-// Display parsed event
-function displayParsedEvent(event) {
-  const section = document.getElementById('parsedEventSection');
-  section.innerHTML = `
-    <div class="parsed-event">
-      <h3>Parsed Event Details</h3>
-      <div class="event-field"><strong>Title:</strong> ${event.title}</div>
-      <div class="event-field"><strong>Start:</strong> ${formatDateTime(event.startDateTime)}</div>
-      <div class="event-field"><strong>End:</strong> ${formatDateTime(event.endDateTime)}</div>
-      <div class="event-field"><strong>Category:</strong> ${event.category}</div>
-      <div class="event-field"><strong>Priority:</strong> ${event.priority}</div>
-      <div class="event-field"><strong>Flexibility:</strong> ${event.flexibility}</div>
-      ${event.description ? `<div class="event-field"><strong>Description:</strong> ${event.description}</div>` : ''}
-      <button onclick="createEvent()" style="margin-top: 12px; background: #0f7b6c;">
-        ✅ Add to Calendar
-      </button>
-    </div>
-  `;
-}
-
-// Create event
-async function createEvent() {
-  showMessage('Creating event...', 'success');
-  
-  try {
-    // Implementation here - call backend API to create event
-    showMessage('✅ Event would be created! (Connect OAuth first)', 'success');
-  } catch (error) {
-    showMessage('❌ Failed to create event', 'error');
+    // Reset loading state
+    submitBtn.disabled = false;
+    submitText.style.display = 'inline';
+    submitLoader.style.display = 'none';
   }
 }
 
@@ -144,5 +197,6 @@ function displayUser(user) {
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
   checkAuth();
+  setDefaultDates();
 });
 

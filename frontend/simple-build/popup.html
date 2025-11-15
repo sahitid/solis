@@ -70,36 +70,127 @@
       margin-bottom: 20px;
     }
     
+    .event-form {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    
+    .form-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+    
+    label {
+      font-size: 13px;
+      font-weight: 500;
+      color: #37352f;
+    }
+    
+    input[type="text"],
+    input[type="date"],
+    input[type="time"],
+    select,
     textarea {
       width: 100%;
-      min-height: 100px;
-      padding: 12px;
+      padding: 10px 12px;
       border: 1px solid #e9e9e7;
       border-radius: 6px;
       font-family: inherit;
       font-size: 14px;
+      color: #37352f;
+      background: white;
+      transition: border-color 0.2s;
+    }
+    
+    input:focus,
+    select:focus,
+    textarea:focus {
+      outline: none;
+      border-color: #2383e2;
+      box-shadow: 0 0 0 3px rgba(35, 131, 226, 0.1);
+    }
+    
+    textarea {
       resize: vertical;
+      min-height: 60px;
+    }
+    
+    select {
+      cursor: pointer;
+    }
+    
+    small {
+      font-size: 12px;
+      color: #787774;
+      margin-top: -4px;
+    }
+    
+    .form-actions {
+      display: flex;
+      gap: 12px;
+      margin-top: 8px;
+      justify-content: flex-end;
     }
     
     button {
       padding: 10px 20px;
-      background: #2383e2;
-      color: white;
       border: none;
       border-radius: 6px;
       cursor: pointer;
       font-size: 14px;
       font-weight: 500;
-      margin-top: 12px;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      gap: 8px;
     }
     
-    button:hover {
+    .btn-cancel {
+      background: transparent;
+      color: #787774;
+      border: 1px solid #e9e9e7;
+    }
+    
+    .btn-cancel:hover {
+      background: #f7f6f3;
+    }
+    
+    .btn-submit {
+      background: #2383e2;
+      color: white;
+    }
+    
+    .btn-submit:hover {
       background: #1a6bb8;
+      transform: translateY(-1px);
+      box-shadow: 0 2px 8px rgba(35, 131, 226, 0.3);
     }
     
     button:disabled {
-      opacity: 0.5;
+      opacity: 0.6;
       cursor: not-allowed;
+      transform: none !important;
+    }
+    
+    .loader {
+      width: 16px;
+      height: 16px;
+      border: 2px solid rgba(255, 255, 255, 0.3);
+      border-top-color: white;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    
+    @keyframes spin {
+      to { transform: rotate(360deg); }
     }
     
     .message {
@@ -194,15 +285,65 @@
     <div id="home" class="tab-content active">
       <h2 style="margin-bottom: 16px;">Add New Event</h2>
       
-      <div class="input-section">
-        <textarea 
-          id="eventInput" 
-          placeholder='Type naturally like "Coffee with John tomorrow at 3pm"'
-        ></textarea>
-        <button onclick="parseEvent()" id="parseBtn">🤖 Parse Event</button>
-      </div>
+      <form id="eventForm" class="event-form">
+        <div class="form-group">
+          <label for="eventName">Event Name *</label>
+          <input type="text" id="eventName" placeholder="e.g., Coffee with John" required>
+        </div>
+        
+        <div class="form-row">
+          <div class="form-group">
+            <label for="startDate">Start Date *</label>
+            <input type="date" id="startDate" required>
+          </div>
+          <div class="form-group">
+            <label for="startTime">Start Time *</label>
+            <input type="time" id="startTime" required>
+          </div>
+        </div>
+        
+        <div class="form-row">
+          <div class="form-group">
+            <label for="endDate">End Date *</label>
+            <input type="date" id="endDate" required>
+          </div>
+          <div class="form-group">
+            <label for="endTime">End Time *</label>
+            <input type="time" id="endTime" required>
+          </div>
+        </div>
+        
+        <div class="form-group">
+          <label for="eventDescription">Event Description</label>
+          <textarea id="eventDescription" rows="3" placeholder="Add details about your event..."></textarea>
+        </div>
+        
+        <div class="form-group">
+          <label for="eventFlexibility">Event Flexibility *</label>
+          <select id="eventFlexibility" required>
+            <option value="">Select flexibility...</option>
+            <option value="Rigid">Rigid - Can't be moved or overlapped</option>
+            <option value="Passive">Passive - Can overlap but can't move</option>
+            <option value="Busy">Busy - Can move but can't overlap</option>
+            <option value="Flexible">Flexible - Can overlap and move</option>
+          </select>
+        </div>
+        
+        <div class="form-group">
+          <label for="eventGuests">Event Guests (Email addresses)</label>
+          <input type="text" id="eventGuests" placeholder="email@example.com, another@example.com">
+          <small>Separate multiple emails with commas</small>
+        </div>
+        
+        <div class="form-actions">
+          <button type="button" class="btn-cancel" onclick="cancelForm()">Cancel</button>
+          <button type="submit" class="btn-submit" id="submitBtn">
+            <span id="submitText">Add to Calendar</span>
+            <span id="submitLoader" class="loader" style="display: none;"></span>
+          </button>
+        </div>
+      </form>
       
-      <div id="parsedEventSection"></div>
       <div id="message"></div>
     </div>
     
