@@ -7,9 +7,9 @@
 body {
   width: 400px;
   min-height: 500px;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
-  background: #ffffff;
-  color: #37352f;
+  font-family: "Lexend Deca", -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+  background: #EBEBEB;
+  color: #262626;
 }
 
 /* Screens */
@@ -23,13 +23,13 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: #EBEBEB;
   padding: 40px 20px;
 }
 
 .login-container {
   text-align: center;
-  color: white;
+  color: #262626;
 }
 
 .logo {
@@ -72,8 +72,8 @@ body {
   align-items: center;
   justify-content: space-between;
   padding: 16px;
-  border-bottom: 1px solid #e9e9e7;
-  background: #f7f6f3;
+  border-bottom: 1px solid #D8D8D8;
+  background: #FFFFFF;
 }
 
 .user-info {
@@ -87,7 +87,7 @@ body {
   width: 40px;
   height: 40px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, #FF8934 0%, #FFAB41 100%);
   color: white;
   display: flex;
   align-items: center;
@@ -105,12 +105,12 @@ body {
 .user-name {
   font-size: 14px;
   font-weight: 600;
-  color: #37352f;
+  color: #262626;
 }
 
 .user-email {
   font-size: 12px;
-  color: #787774;
+  color: #2F2F2F;
 }
 
 .content {
@@ -120,7 +120,7 @@ body {
 .content h2 {
   font-size: 20px;
   margin-bottom: 16px;
-  color: #37352f;
+  color: #262626;
 }
 
 /* Forms */
@@ -139,7 +139,7 @@ label {
   display: block;
   font-size: 13px;
   font-weight: 500;
-  color: #37352f;
+  color: #2F2F2F;
   margin-bottom: 6px;
 }
 
@@ -150,12 +150,12 @@ select,
 textarea {
   width: 100%;
   padding: 8px 10px;
-  border: 1px solid #e9e9e7;
+  border: 1px solid #D8D8D8;
   border-radius: 6px;
   font-family: inherit;
   font-size: 14px;
-  color: #37352f;
-  background: white;
+  color: #262626;
+  background: #FFFFFF;
   transition: border-color 0.2s;
 }
 
@@ -163,8 +163,8 @@ input:focus,
 select:focus,
 textarea:focus {
   outline: none;
-  border-color: #2383e2;
-  box-shadow: 0 0 0 3px rgba(35, 131, 226, 0.1);
+  border-color: #FF8934;
+  box-shadow: 0 0 0 3px rgba(255, 137, 52, 0.15);
 }
 
 textarea {
@@ -173,7 +173,7 @@ textarea {
 
 small {
   font-size: 11px;
-  color: #787774;
+  color: #2F2F2F;
   display: block;
   margin-top: 4px;
 }
@@ -200,7 +200,7 @@ button {
 }
 
 .btn-primary {
-  background: #2383e2;
+  background: #FF8934;
   color: white;
   flex: 1;
   min-height: 40px;
@@ -208,19 +208,19 @@ button {
 }
 
 .btn-primary:hover:not(:disabled) {
-  background: #1a6bb8;
+  background: #FFAB41;
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(35, 131, 226, 0.3);
+  box-shadow: 0 4px 12px rgba(255, 137, 52, 0.3);
 }
 
 .btn-secondary {
   background: transparent;
-  color: #787774;
-  border: 1px solid #e9e9e7;
+  color: #2F2F2F;
+  border: 1px solid #D8D8D8;
 }
 
 .btn-secondary:hover:not(:disabled) {
-  background: #f7f6f3;
+  background: #FFFFFF;
 }
 
 .btn-icon {
@@ -315,7 +315,7 @@ button:disabled {
 }
 
 .modal-content {
-  background: white;
+  background: #FFFFFF;
   border-radius: 12px;
   width: 90%;
   max-width: 450px;
@@ -341,13 +341,13 @@ button:disabled {
   align-items: center;
   justify-content: space-between;
   padding: 20px;
-  border-bottom: 1px solid #e9e9e7;
+  border-bottom: 1px solid #D8D8D8;
 }
 
 .modal-header h3 {
   font-size: 18px;
   font-weight: 600;
-  color: #37352f;
+  color: #262626;
   margin: 0;
 }
 
@@ -355,7 +355,7 @@ button:disabled {
   background: none;
   border: none;
   font-size: 28px;
-  color: #787774;
+  color: #2F2F2F;
   cursor: pointer;
   padding: 0;
   width: 32px;
@@ -368,7 +368,7 @@ button:disabled {
 }
 
 .close-btn:hover {
-  background: #f7f6f3;
+  background: #FFFFFF;
 }
 
 .modal-body {
@@ -395,7 +395,7 @@ button:disabled {
 }
 
 .ai-analysis {
-  background: #e8f4fd;
+  background: #FFF4EB;
   padding: 16px;
   border-radius: 8px;
   margin-bottom: 16px;
@@ -405,13 +405,13 @@ button:disabled {
   margin: 0 0 8px 0;
   font-size: 14px;
   font-weight: 600;
-  color: #1a6bb8;
+  color: #FF8934;
 }
 
 .ai-analysis p {
   margin: 0 0 8px 0;
   font-size: 13px;
-  color: #37352f;
+  color: #262626;
   line-height: 1.5;
 }
 
@@ -451,8 +451,8 @@ button:disabled {
 }
 
 .slot-card {
-  background: white;
-  border: 2px solid #2383e2;
+  background: #FFFFFF;
+  border: 2px solid #FF8934;
   border-radius: 8px;
   padding: 12px;
   cursor: pointer;
@@ -461,20 +461,20 @@ button:disabled {
 
 .slot-card:hover {
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(35, 131, 226, 0.2);
+  box-shadow: 0 4px 12px rgba(255, 137, 52, 0.2);
 }
 
 .slot-time {
   font-size: 15px;
   font-weight: 600;
-  color: #37352f;
+  color: #262626;
   margin-bottom: 6px;
   line-height: 1.4;
 }
 
 .slot-reason {
   font-size: 13px;
-  color: #787774;
+  color: #2F2F2F;
   line-height: 1.4;
   font-weight: 500;
 }
@@ -497,8 +497,8 @@ button:disabled {
   align-items: center;
   gap: 12px;
   padding: 16px;
-  background: white;
-  border: 2px solid #e9e9e7;
+  background: #FFFFFF;
+  border: 2px solid #D8D8D8;
   border-radius: 8px;
   cursor: pointer;
   transition: all 0.2s;
@@ -506,8 +506,8 @@ button:disabled {
 }
 
 .decision-option:hover {
-  border-color: #2383e2;
-  background: #f7f9fc;
+  border-color: #FF8934;
+  background: #FFF4EB;
   transform: translateX(4px);
 }
 
@@ -523,13 +523,13 @@ button:disabled {
 .option-title {
   font-size: 14px;
   font-weight: 600;
-  color: #37352f;
+  color: #262626;
   margin-bottom: 2px;
 }
 
 .option-desc {
   font-size: 12px;
-  color: #787774;
+  color: #2F2F2F;
 }
 
 .full-width {
@@ -538,8 +538,8 @@ button:disabled {
 }
 
 .day-option {
-  background: white;
-  border: 2px solid #e9e9e7;
+  background: #FFFFFF;
+  border: 2px solid #D8D8D8;
   border-radius: 8px;
   padding: 14px;
   margin-bottom: 10px;
@@ -548,8 +548,8 @@ button:disabled {
 }
 
 .day-option:hover {
-  border-color: #2383e2;
-  background: #f7f9fc;
+  border-color: #FF8934;
+  background: #FFF4EB;
 }
 
 .day-header {
@@ -562,12 +562,12 @@ button:disabled {
 .day-name {
   font-size: 15px;
   font-weight: 600;
-  color: #37352f;
+  color: #262626;
 }
 
 .slot-count {
   font-size: 12px;
-  color: #787774;
+  color: #2F2F2F;
 }
 
 .time-slots {
@@ -578,8 +578,8 @@ button:disabled {
 
 .time-chip {
   padding: 4px 10px;
-  background: #e8f4fd;
-  color: #1a6bb8;
+  background: #FFF4EB;
+  color: #FF8934;
   border-radius: 4px;
   font-size: 12px;
   font-weight: 500;
@@ -596,8 +596,8 @@ button:disabled {
 .loader-large {
   width: 40px;
   height: 40px;
-  border: 4px solid #e9e9e7;
-  border-top-color: #2383e2;
+  border: 4px solid #D8D8D8;
+  border-top-color: #FF8934;
   border-radius: 50%;
   animation: spin 1s linear infinite;
   margin-bottom: 16px;

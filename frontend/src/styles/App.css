@@ -3,28 +3,28 @@
  */
 
 :root {
-  /* Notion Color Palette */
-  --notion-bg: #ffffff;
-  --notion-secondary-bg: #f7f6f3;
-  --notion-border: #e9e9e7;
-  --notion-text: #37352f;
-  --notion-text-secondary: #787774;
-  --notion-text-light: #9b9a97;
+  /* Branding Palette */
+  --notion-bg: #EBEBEB;                /* Background */
+  --notion-secondary-bg: #FFFFFF;      /* Cards/panels */
+  --notion-border: #D8D8D8;
+  --notion-text: #262626;              /* Primary text */
+  --notion-text-secondary: #2F2F2F;    /* Secondary text */
+  --notion-text-light: #6b6b6b;
   
-  /* Brand Colors */
-  --primary: #2383e2;
-  --primary-hover: #1a6bb8;
+  /* Brand Accent */
+  --primary: #FF8934;                  /* Accent */
+  --primary-hover: #FFAB41;            /* Accent hover */
   --success: #0f7b6c;
   --warning: #df5616;
   --error: #e03e3e;
   
-  /* Semantic Colors */
-  --blue: #2383e2;
+  /* Semantic Colors (kept if referenced) */
+  --blue: #FF8934;
   --green: #0f7b6c;
-  --yellow: #dfab01;
+  --yellow: #FFAB41;
   --red: #e03e3e;
-  --purple: #9065b0;
-  --pink: #c14c8a;
+  --purple: #FFAB41;
+  --pink: #FF8934;
   
   /* Spacing */
   --spacing-xs: 4px;
@@ -45,7 +45,7 @@
   --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.12);
   
   /* Typography */
-  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+  --font-sans: "Lexend Deca", -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
   --font-mono: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, Courier, monospace;
 }
 
