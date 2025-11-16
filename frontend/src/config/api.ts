@@ -55,6 +55,7 @@ export const ENDPOINTS = {
     RECORD_RESPONSE: '/reschedule/record-response',
     FINALIZE: '/reschedule/finalize-proposal',
     GET_PROPOSAL: (proposalId: string) => `/reschedule/proposal/${proposalId}`,
+    CANCEL_EVENT: '/reschedule/cancel-event',
   },
 };
 

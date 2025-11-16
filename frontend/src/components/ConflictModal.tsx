@@ -38,6 +38,19 @@ const ConflictModal: React.FC<ConflictModalProps> = ({
     setShowReschedule(true);
   };
 
+  const handleCancelExistingEvent = async () => {
+    if (!primaryConflict) return;
+    setLoading(true);
+    try {
+      await API.reschedule.cancelEvent(user.email, primaryConflict.conflictingEvent.id);
+      onResolved();
+    } catch (err) {
+      console.error('Failed to cancel event:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleKeepCurrent = async () => {
     setLoading(true);
     try {
@@ -84,6 +97,17 @@ const ConflictModal: React.FC<ConflictModalProps> = ({
           <p className="conflict-message">
             Your new event conflicts with {conflicts.length} existing event{conflicts.length > 1 ? 's' : ''}.
           </p>
+
+          {primaryConflict.existingEventHasAttendees && (
+            <div className="multi-attendee-prompt">
+              <p className="prompt-title">
+                This event has {primaryConflict.conflictingEvent.Event_Guests.length} attendee{primaryConflict.conflictingEvent.Event_Guests.length !== 1 ? 's' : ''}.
+              </p>
+              <p className="prompt-subtitle">
+                Would you like to find a new time that works for everyone?
+              </p>
+            </div>
+          )}
 
           <div className="events-comparison">
             <div className="event-card new-event">
@@ -160,31 +184,57 @@ const ConflictModal: React.FC<ConflictModalProps> = ({
         </div>
 
         <div className="modal-actions">
-          <button
-            className="action-button secondary"
-            onClick={onClose}
-            disabled={loading}
-          >
-            Cancel
-          </button>
-          
-          {primaryConflict.existingEventCanMove && (
-            <button
-              className="action-button primary"
-              onClick={handleMoveExisting}
-              disabled={loading}
-            >
-              Reschedule Existing Event
-            </button>
+          {primaryConflict.existingEventHasAttendees ? (
+            <>
+              <button
+                className="action-button primary"
+                onClick={handleMoveExisting}
+                disabled={loading}
+              >
+                Yes, find a new time
+              </button>
+              <button
+                className="action-button secondary"
+                onClick={onClose}
+                disabled={loading}
+              >
+                No, keep original schedule
+              </button>
+              <button
+                className="action-button warning"
+                onClick={handleCancelExistingEvent}
+                disabled={loading}
+              >
+                Cancel the conflicting event
+              </button>
+            </>
+          ) : (
+            <>
+              {primaryConflict.existingEventCanMove && (
+                <button
+                  className="action-button primary"
+                  onClick={handleMoveExisting}
+                  disabled={loading}
+                >
+                  Reschedule Existing Event
+                </button>
+              )}
+              <button
+                className="action-button warning"
+                onClick={handleKeepCurrent}
+                disabled={loading}
+              >
+                {loading ? 'Creating...' : 'Keep Both (Override)'}
+              </button>
+              <button
+                className="action-button secondary"
+                onClick={onClose}
+                disabled={loading}
+              >
+                Cancel
+              </button>
+            </>
           )}
-          
-          <button
-            className="action-button warning"
-            onClick={handleKeepCurrent}
-            disabled={loading}
-          >
-            {loading ? 'Creating...' : 'Keep Both (Override)'}
-          </button>
         </div>
       </div>
     </div>

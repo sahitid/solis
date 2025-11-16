@@ -135,6 +135,8 @@ export const API = {
       apiClient.post(ENDPOINTS.RESCHEDULE.FINALIZE, { email, proposalId }),
     getProposal: (proposalId: string, email: string) =>
       apiClient.get(ENDPOINTS.RESCHEDULE.GET_PROPOSAL(proposalId), { params: { email } }),
+    cancelEvent: (email: string, eventId: string, reason?: string) =>
+      apiClient.post(ENDPOINTS.RESCHEDULE.CANCEL_EVENT, { email, eventId, reason }),
   },
 };
 

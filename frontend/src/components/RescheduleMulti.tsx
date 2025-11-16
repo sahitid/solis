@@ -105,18 +105,20 @@ const RescheduleMulti: React.FC<RescheduleMultiProps> = ({
     setError('');
 
     try {
-      const result = await API.reschedule.proposeMulti(
+      const result = await API.reschedule.proposeMultiAttendee(
         user.email,
         event.id,
-        selectedSlot.startDateTime,
-        selectedSlot.endDateTime,
+        {
+          startDateTime: selectedSlot.startDateTime,
+          endDateTime: selectedSlot.endDateTime
+        },
         reason
       );
 
       if (result.success) {
         setProposalSent(true);
         setProposalStatus({
-          proposalId: result.proposalId,
+          proposalId: result.proposalId || result.proposal?.id,
           status: 'pending',
           responses: [],
           totalAttendees: event.attendees?.length || 0,
@@ -134,20 +136,24 @@ const RescheduleMulti: React.FC<RescheduleMultiProps> = ({
 
   const checkProposalStatus = async (proposalId: string) => {
     try {
-      const result = await API.reschedule.getProposalStatus(proposalId);
+      const result = await API.reschedule.getProposal(proposalId, user.email);
       
       if (result.success && result.proposal) {
         const proposal = result.proposal;
         setProposalStatus({
-          proposalId: proposal.ID,
-          status: proposal.Status,
-          responses: proposal.Responses || [],
-          totalAttendees: proposal.Total_Attendees,
-          acceptCount: proposal.Accept_Count,
-          rejectCount: proposal.Reject_Count,
+          proposalId: proposal.id,
+          status: proposal.status,
+          responses: (proposal.attendeeResponses || []).map((r: any) => ({
+            attendeeEmail: r.email,
+            vote: r.response === 'yes' ? 'accept' : r.response === 'no' ? 'reject' : 'accept', // map tentative as accept for bar, can refine
+            timestamp: r.responseDate || new Date().toISOString(),
+          })),
+          totalAttendees: proposal.attendeeResponses?.length || 0,
+          acceptCount: proposal.majorityVoteResult?.yesCount || 0,
+          rejectCount: proposal.majorityVoteResult?.noCount || 0,
         });
 
-        if (proposal.Status === 'approved') {
+        if (proposal.status === 'approved') {
           // Auto-finalize if approved
           await finalizeProposal(proposalId);
         }
@@ -159,7 +165,7 @@ const RescheduleMulti: React.FC<RescheduleMultiProps> = ({
 
   const finalizeProposal = async (proposalId: string) => {
     try {
-      const result = await API.reschedule.finalizeProposal(proposalId);
+      const result = await API.reschedule.finalizeProposal(user.email, proposalId);
       
       if (result.success) {
         onSuccess();

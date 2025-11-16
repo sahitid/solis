@@ -527,18 +527,39 @@ async function handleAcceptSlot() {
       console.log('📋 New time slot:', slot.startDateTime, 'to', slot.endDateTime);
       
       const conflictingEventId = conflictData.conflicts[0].conflictingEvent.id;
-      
-      // Step 1: Move existing event to suggested slot
-      console.log('📦 Step 1: Moving existing event to new slot...');
-      console.log('🔹 Calling /move-manual with:', {
-        email: currentUser.Email,
-        eventId: conflictingEventId,
-        newTimeSlot: {
-          startDateTime: slot.startDateTime,
-          endDateTime: slot.endDateTime
+
+      // If the existing event has attendees, DO NOT move the event now.
+      // Instead, send a reschedule proposal email to attendees and DO NOT change times.
+      const eventToMoveHasAttendees = !!recommendation.eventToMove?.hasAttendees;
+      if (eventToMoveHasAttendees) {
+        console.log('📧 Existing event has attendees. Sending reschedule proposal instead of moving it.');
+        const proposeResponse = await fetch(`${API_BASE}/reschedule/propose-multi-attendee`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: currentUser.Email,
+            eventId: conflictingEventId,
+            newTimeSlot: {
+              startDateTime: slot.startDateTime,
+              endDateTime: slot.endDateTime
+            },
+            reason: 'Conflict with new event'
+          })
+        });
+        const proposeData = await proposeResponse.json();
+        console.log('📊 Propose response:', proposeResponse.status, proposeData);
+        if (!proposeResponse.ok || !proposeData.success) {
+          throw new Error(proposeData.error || 'Failed to send proposal email');
         }
-      });
-      
+        closeConflictModal();
+        showMessage(`✅ Proposal email sent to attendees for "${recommendation.eventToMove.name}".`, 'success');
+        document.getElementById('eventForm').reset();
+        setDefaultDates();
+        return;
+      }
+
+      // Otherwise, proceed with immediate move (no attendees on existing event)
+      console.log('📦 Moving existing event (no attendees) and creating new event at original time...');
       const moveResponse = await fetch(`${API_BASE}/reschedule-decision/move-manual`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -552,39 +573,21 @@ async function handleAcceptSlot() {
           userApproved: true
         })
       });
-      
-      console.log('📬 Move response status:', moveResponse.status);
       const moveData = await moveResponse.json();
-      console.log('📊 Move response data:', moveData);
-      
       if (!moveResponse.ok || !moveData.success) {
-        console.error('❌ Failed to move existing event:', moveData);
         throw new Error(moveData.error || 'Failed to move existing event');
       }
-      
-      console.log('✅ Existing event moved successfully to', slot.startDateTime);
-      
-      // Step 2: Schedule new event at its ORIGINAL time
-      console.log('📦 Step 2: Scheduling new event at ORIGINAL time...');
-      console.log('🔹 Original event data:', currentEventData);
-      
       const createResponse = await fetch(`${API_BASE}/events/create`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           email: currentUser.Email,
-          eventData: currentEventData, // Use original time
+          eventData: currentEventData,
           skipConflictCheck: true
         })
       });
-      
-      console.log('📬 Create response status:', createResponse.status);
       const createData = await createResponse.json();
-      console.log('📊 Create response data:', createData);
-      
       if (createResponse.ok && createData.success) {
-        console.log('✅✅ SUCCESS! Both operations completed');
-        // Save the event title before closing modal (which clears currentEventData)
         const newEventTitle = currentEventData.title;
         const successMsg = `✅ "${recommendation.eventToMove.name}" moved to ${slot.formatted.startTime}, your "${newEventTitle}" scheduled at original time!`;
         closeConflictModal();
@@ -592,7 +595,6 @@ async function handleAcceptSlot() {
         document.getElementById('eventForm').reset();
         setDefaultDates();
       } else {
-        console.error('❌ Failed to create new event:', createData);
         throw new Error(createData.error || 'Failed to schedule new event');
       }
     }

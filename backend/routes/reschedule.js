@@ -17,6 +17,7 @@ const {
   calculateMajorityVote
 } = require('../services/emailService');
 const { updateCalendarEvent } = require('../services/calendarService');
+const { deleteCalendarEvent } = require('../services/calendarService');
 const { detectCascadeConflicts } = require('../services/conflictDetector');
 
 // @route   POST /api/reschedule/find-best-slot
@@ -585,6 +586,59 @@ router.get('/proposal/:proposalId', async (req, res) => {
   } catch (error) {
     console.error('Get proposal error:', error);
     res.status(500).json({ error: 'Failed to get proposal', details: error.message });
+  }
+});
+
+// @route   POST /api/reschedule/cancel-event
+// @desc    Cancel an event (with email notification if has attendees)
+// @access  Private
+router.post('/cancel-event', async (req, res) => {
+  const { email, eventId, reason = '' } = req.body;
+  
+  if (!email || !eventId) {
+    return res.status(400).json({ success: false, error: 'Email and event ID are required' });
+  }
+  
+  try {
+    const user = await User.findOne({ Email: email });
+    if (!user) {
+      return res.status(404).json({ success: false, error: 'User not found' });
+    }
+    
+    const event = await Event.findOne({ ID: eventId, User_Email: email });
+    if (!event) {
+      return res.status(404).json({ success: false, error: 'Event not found' });
+    }
+    
+    const hasAttendees = (event.Event_Guests || []).length > 0;
+    
+    // Delete from Google Calendar (automatically notifies attendees)
+    const calendarDelete = await deleteCalendarEvent(user.OAuth_Token, event.GCal_Event_ID);
+    if (!calendarDelete.success) {
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to delete event from Google Calendar',
+        details: calendarDelete.error
+      });
+    }
+    
+    // Delete from DB
+    await Event.deleteOne({ ID: eventId, User_Email: email });
+    
+    res.json({
+      success: true,
+      message: hasAttendees
+        ? 'Event canceled and attendees notified via Google Calendar'
+        : 'Event canceled',
+      event: {
+        id: eventId,
+        name: event.Event_Name
+      }
+    });
+    
+  } catch (error) {
+    console.error('Cancel event (reschedule) error:', error);
+    res.status(500).json({ success: false, error: 'Failed to cancel event', details: error.message });
   }
 });
 
