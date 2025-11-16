@@ -10,6 +10,7 @@ const {
   compareEventPriorityWithAI
 } = require('../services/rescheduler');
 const { updateCalendarEvent, deleteCalendarEvent, getCalendarEvents } = require('../services/calendarService');
+const { compareEventImportance, compareEventFlexibility } = require('../services/conflictDetector');
 
 // @route   POST /api/reschedule-decision/analyze-conflict
 // @desc    Analyze conflict and suggest best action (using AI for priority)
@@ -48,20 +49,74 @@ router.post('/analyze-conflict', async (req, res) => {
       }
     } catch (aiError) {
       console.error('❌ AI comparison failed, using fallback:', aiError);
-      // Fallback: compare by priority values
-      const newEventPriority = newEventData.priority || newEventData.Event_Priority || 2;
-      const conflictingEventPriority = conflictingEvent.Event_Priority || 2;
+      // Fallback: use heuristic comparison with tie-breakers (flexibility, attendees)
+      const importance = compareEventImportance(newEventData, conflictingEvent);
+      let higherPriorityEvent;
+      if (importance === 1) {
+        higherPriorityEvent = 1; // new event higher
+      } else if (importance === 2) {
+        higherPriorityEvent = 2; // existing event higher
+      } else {
+        // Equal importance → tie-break using flexibility (less flexible wins)
+        const flexibility = compareEventFlexibility(newEventData, conflictingEvent);
+        if (flexibility === 1) {
+          // new is more flexible → existing is effectively higher priority to keep
+          higherPriorityEvent = 2;
+        } else if (flexibility === 2) {
+          // existing is more flexible → new is effectively higher priority to keep
+          higherPriorityEvent = 1;
+        } else {
+          // Still equal → prefer keeping event with attendees (harder to move)
+          const newHasAttendees = (newEventData.attendees || newEventData.Event_Guests || []).length > 0;
+          const existingHasAttendees = (conflictingEvent.Event_Guests || []).length > 0;
+          if (existingHasAttendees && !newHasAttendees) {
+            higherPriorityEvent = 2;
+          } else if (newHasAttendees && !existingHasAttendees) {
+            higherPriorityEvent = 1;
+          } else {
+            // Final tie → prefer not disrupting existing event
+            higherPriorityEvent = 2;
+          }
+        }
+      }
       aiComparison = {
-        higherPriorityEvent: newEventPriority > conflictingEventPriority ? 1 : 2,
-        reason: 'Using priority values (AI unavailable)',
-        confidenceLevel: 'low'
+        higherPriorityEvent,
+        reason: 'Using heuristic comparison (AI unavailable)',
+        confidenceLevel: 'medium'
       };
+    }
+
+    // Normalize higherPriorityEvent in case AI returns string labels
+    // Map: 'new' => 1, 'existing' => 2
+    const normalizedHigherPriority =
+      typeof aiComparison.higherPriorityEvent === 'string'
+        ? (aiComparison.higherPriorityEvent === 'new' ? 1 : 2)
+        : aiComparison.higherPriorityEvent;
+
+    // If normalized result is invalid or 0 (equal), fall back to heuristic to decide
+    let finalHigherPriority = normalizedHigherPriority;
+    if (!finalHigherPriority || (finalHigherPriority !== 1 && finalHigherPriority !== 2)) {
+      const importance = compareEventImportance(newEventData, conflictingEvent);
+      if (importance === 1) finalHigherPriority = 1;
+      else if (importance === 2) finalHigherPriority = 2;
+      else {
+        const flexibility = compareEventFlexibility(newEventData, conflictingEvent);
+        if (flexibility === 1) finalHigherPriority = 2; // keep existing
+        else if (flexibility === 2) finalHigherPriority = 1; // keep new
+        else {
+          const newHasAttendees = (newEventData.attendees || newEventData.Event_Guests || []).length > 0;
+          const existingHasAttendees = (conflictingEvent.Event_Guests || []).length > 0;
+          if (existingHasAttendees && !newHasAttendees) finalHigherPriority = 2;
+          else if (newHasAttendees && !existingHasAttendees) finalHigherPriority = 1;
+          else finalHigherPriority = 2; // prefer not disrupting existing
+        }
+      }
     }
 
     // IMPORTANT: Always move the LOWER priority event
     // If new event is higher priority (1), move the existing event
     // If existing event is higher priority (2), move the new event
-    const shouldMoveNewEvent = aiComparison.higherPriorityEvent === 2; // Existing event is higher priority
+    const shouldMoveNewEvent = finalHigherPriority === 2; // Existing event is higher priority
     const eventToMove = shouldMoveNewEvent ? newEventData : conflictingEvent;
     const eventToKeep = shouldMoveNewEvent ? conflictingEvent : newEventData;
 
@@ -407,7 +462,9 @@ router.post('/analyze-conflict', async (req, res) => {
             id: eventToKeep.ID || 'new',
             name: eventToKeep.Event_Name || eventToKeep.title
           }
-        }
+        },
+        // Include the best same-day slot so the frontend can act on it
+        sameDayBestSlot: sameDayBestSlot
       },
       // PRD: Three options to show user
       options: {
