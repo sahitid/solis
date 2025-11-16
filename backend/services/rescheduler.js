@@ -32,7 +32,12 @@ function findAvailableTimeSlots(
   // Determine search range
   const searchStart = targetDate ? new Date(targetDate) : new Date();
   const searchEnd = new Date(searchStart);
-  searchEnd.setDate(searchEnd.getDate() + (sameDayOnly ? 1 : searchDays));
+  if (sameDayOnly) {
+    // Clamp to end of the same day
+    searchEnd.setHours(23, 59, 59, 999);
+  } else {
+    searchEnd.setDate(searchEnd.getDate() + searchDays);
+  }
 
   // Helper to check if time is within work hours
   const isWithinWorkHours = (dateTime, dayOfWeek) => {
@@ -134,6 +139,14 @@ function findAvailableTimeSlots(
     const roundedMinutes = Math.ceil(minutes / 30) * 30;
     currentDate.setMinutes(roundedMinutes);
     currentDate.setSeconds(0, 0);
+    // If rounding pushed us into tomorrow, bail (no same-day times left)
+    const sameDay = new Date(searchStart);
+    if (currentDate.getFullYear() !== sameDay.getFullYear() ||
+        currentDate.getMonth() !== sameDay.getMonth() ||
+        currentDate.getDate() !== sameDay.getDate()) {
+      console.log('⏭️ Same-day search exhausted (current time beyond end of day)');
+      return [];
+    }
     console.log(`⏰ Same-day search: Starting from current time ${currentDate.toLocaleTimeString()} (not past)`);
   }
   
@@ -152,6 +165,15 @@ function findAvailableTimeSlots(
     if (sameDayOnly && currentDate < currentNow) {
       currentDate.setMinutes(currentDate.getMinutes() + 30);
       continue;
+    }
+    // Guard: never roll into the next day during same-day searches
+    if (sameDayOnly) {
+      const sameDay = new Date(searchStart);
+      if (currentDate.getFullYear() !== sameDay.getFullYear() ||
+          currentDate.getMonth() !== sameDay.getMonth() ||
+          currentDate.getDate() !== sameDay.getDate()) {
+        break;
+      }
     }
     
     // Check if within work hours
@@ -201,7 +223,7 @@ function findAvailableTimeSlots(
     currentDate.setMinutes(currentDate.getMinutes() + 30);
     
     // If past 8 PM, move to next day at 8 AM
-    if (currentDate.getHours() >= 20) {
+    if (!sameDayOnly && currentDate.getHours() >= 20) {
       currentDate.setDate(currentDate.getDate() + 1);
       currentDate.setHours(8, 0, 0, 0);
     }
