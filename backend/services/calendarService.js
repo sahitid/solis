@@ -9,6 +9,18 @@ async function createCalendarEvent(userTokens, eventData) {
     const auth = getAuthenticatedClient(userTokens);
     const calendar = google.calendar({ version: 'v3', auth });
 
+    // Map flexibility to Google Calendar colorId
+    // Google supported event colorIds: '1'..'11'
+    // 11=Tomato (red), 10=Basil (green), 9=Blueberry (blue), 5=Banana (yellow)
+    const flexibility = (eventData.flexibility || '').toString().toLowerCase();
+    const flexibilityToColorId = {
+      rigid: '11',     // red
+      flexible: '10',  // green
+      passive: '9',    // blue
+      busy: '5'        // yellow
+    };
+    const colorId = flexibilityToColorId[flexibility] || undefined;
+
     const event = {
       summary: eventData.title,
       description: eventData.description || '',
@@ -27,6 +39,7 @@ async function createCalendarEvent(userTokens, eventData) {
       reminders: {
         useDefault: true,
       },
+      ...(colorId ? { colorId } : {}),
       extendedProperties: {
         private: {
           flexibility: eventData.flexibility,
