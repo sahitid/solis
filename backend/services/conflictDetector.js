@@ -16,27 +16,9 @@ function doEventsOverlap(event1Start, event1End, event2Start, event2End) {
   // All-day events have start and end on different days, or end is start of next day
   const isAllDay1 = isAllDayEvent(start1, end1);
   const isAllDay2 = isAllDayEvent(start2, end2);
-  
-  // If either is all-day, check if they're on the same day
+  // IGNORE all-day events in conflict detection
   if (isAllDay1 || isAllDay2) {
-    const day1 = start1.toISOString().split('T')[0];
-    const day2 = start2.toISOString().split('T')[0];
-    
-    // All-day events overlap with any event on the same day
-    if (isAllDay1 && isAllDay2) {
-      return day1 === day2;
-    }
-    
-    // All-day event overlaps with timed event if timed event is on the same day
-    if (isAllDay1) {
-      const timedEventDay = start2.toISOString().split('T')[0];
-      return day1 === timedEventDay;
-    }
-    
-    if (isAllDay2) {
-      const timedEventDay = start1.toISOString().split('T')[0];
-      return day2 === timedEventDay;
-    }
+    return false;
   }
 
   // Regular timed events overlap if one starts before the other ends
@@ -55,12 +37,15 @@ function isAllDayEvent(start, end) {
   const startDate = new Date(start);
   const endDate = new Date(end);
   
-  // Check if it spans exactly one calendar day
   const startDay = startDate.toISOString().split('T')[0];
   const endDay = endDate.toISOString().split('T')[0];
   
-  // All-day events: end date is the day after start date
-  // Or duration is close to 24 hours (23-25 hours to account for timezone issues)
+  // Treat any event that spans into a different calendar day as all-day/multi-day for conflict purposes
+  if (endDay > startDay) {
+    return true;
+  }
+  
+  // Otherwise, detect classic all-day (duration ~24h, midnight start)
   const durationHours = (endDate - startDate) / (1000 * 60 * 60);
   const isFullDay = durationHours >= 23 && durationHours <= 25;
   const isNextDay = endDay > startDay;

@@ -226,6 +226,7 @@ router.post('/analyze-conflict', async (req, res) => {
             startDate = new Date(gcalEvent.start.dateTime);
             endDate = new Date(gcalEvent.end.dateTime);
           }
+          const spansDifferentDay = startDate.toDateString() !== endDate.toDateString();
 
           const enrichedEvent = {
             Event_Start_Date: startDate,
@@ -237,7 +238,8 @@ router.post('/analyze-conflict', async (req, res) => {
             Event_Guests: gcalEvent.attendees || [],
             GCal_Event_ID: gcalEvent.id,
             ID: dbEvent?.ID,
-            isAllDay: !!gcalEvent.start.date
+            // Treat any all-day or cross-day event as ignorable in conflict checks
+            isAllDay: !!gcalEvent.start.date || spansDifferentDay
           };
 
           const timeDisplay = gcalEvent.start.date ? 'All Day' : enrichedEvent.Event_Start_Date.toLocaleTimeString();
@@ -324,6 +326,8 @@ router.post('/analyze-conflict', async (req, res) => {
       // Check 2: Verify it doesn't conflict with Rigid/Busy events (double-check)
       if (sameDayBestSlot) {
         for (const event of eventsExcludingMovingEvent) {
+          // Ignore all-day events in double-check
+          if (event.isAllDay) continue;
           const eventStart = new Date(event.Event_Start_Date);
           const eventEnd = new Date(event.Event_End_Date);
           
@@ -691,6 +695,115 @@ router.post('/move-manual', async (req, res) => {
         },
         proposedTime: newTimeSlot
       });
+    }
+
+    // Validate the proposed new time does not conflict with Busy/Rigid events (allow Passive/Flexible)
+    const proposedStart = new Date(newTimeSlot.startDateTime);
+    const proposedEnd = new Date(newTimeSlot.endDateTime);
+
+    // Fetch all events for the day of the proposed time (Google Calendar, enriched with DB)
+    const dayStart = new Date(proposedStart);
+    dayStart.setHours(0, 0, 0, 0);
+    const dayEnd = new Date(proposedStart);
+    dayEnd.setHours(23, 59, 59, 999);
+
+    const calendarResult = await getCalendarEvents(
+      user.OAuth_Token,
+      dayStart.toISOString(),
+      dayEnd.toISOString()
+    );
+
+    let eventsForDay = [];
+    if (calendarResult.success) {
+      const gcalEventIds = calendarResult.events.map(e => e.id).filter(id => id);
+      const dbEvents = await Event.find({
+        User_Email: email,
+        GCal_Event_ID: { $in: gcalEventIds }
+      });
+      const dbEventMap = new Map();
+      dbEvents.forEach(e => {
+        if (e.GCal_Event_ID) {
+          dbEventMap.set(e.GCal_Event_ID, e);
+        }
+      });
+
+      eventsForDay = calendarResult.events.map(gcalEvent => {
+        // Handle all-day and timed events
+        let startDate, endDate;
+        if (gcalEvent.start.date) {
+          startDate = new Date(gcalEvent.start.date);
+          startDate.setHours(0, 0, 0, 0);
+          endDate = new Date(gcalEvent.end.date);
+          endDate.setHours(0, 0, 0, 0);
+        } else {
+          startDate = new Date(gcalEvent.start.dateTime);
+          endDate = new Date(gcalEvent.end.dateTime);
+        }
+        const spansDifferentDay = startDate.toDateString() !== endDate.toDateString();
+        const dbEvent = dbEventMap.get(gcalEvent.id);
+        return {
+          Event_Start_Date: startDate,
+          Event_End_Date: endDate,
+          Event_Name: gcalEvent.summary || dbEvent?.Event_Name || 'Untitled Event',
+          Event_Priority: dbEvent?.Event_Priority || 2,
+          Event_Flexibility: dbEvent?.Event_Flexibility || 'Busy',
+          Event_Type: dbEvent?.Event_Type || 'other',
+          Event_Guests: gcalEvent.attendees || dbEvent?.Event_Guests || [],
+          GCal_Event_ID: gcalEvent.id,
+          ID: dbEvent?.ID,
+          isAllDay: !!gcalEvent.start.date || spansDifferentDay
+        };
+      });
+    } else {
+      // Fallback to DB query for that day
+      eventsForDay = await Event.find({
+        User_Email: email,
+        Event_Start_Date: { $gte: dayStart, $lte: dayEnd }
+      }).lean();
+      // Mark DB all-day/multi-day events best-effort: any cross-day, ~24h duration, or midnight start
+      eventsForDay = eventsForDay.map(e => {
+        const start = new Date(e.Event_Start_Date);
+        const end = new Date(e.Event_End_Date);
+        const durationHours = (end - start) / (1000 * 60 * 60);
+        const isMidnightStart = start.getHours() === 0 && start.getMinutes() === 0 && start.getSeconds() === 0;
+        const spansDifferentDay = start.toDateString() !== end.toDateString();
+        const isAllDay = spansDifferentDay || (durationHours >= 23 && durationHours <= 25) || isMidnightStart;
+        return { ...e, isAllDay };
+      });
+    }
+
+    // Check for conflicts against Busy/Rigid events (exclude the event being moved)
+    for (const other of eventsForDay) {
+      // Ignore all-day events in validation
+      if (other.isAllDay) continue;
+      // Skip the same event (match by GCal ID or internal ID)
+      if (
+        (other.GCal_Event_ID && event.GCal_Event_ID && other.GCal_Event_ID === event.GCal_Event_ID) ||
+        (other.ID && event.ID && other.ID === event.ID)
+      ) {
+        continue;
+      }
+
+      const otherStart = new Date(other.Event_Start_Date);
+      const otherEnd = new Date(other.Event_End_Date);
+      const overlaps = proposedStart < otherEnd && proposedEnd > otherStart;
+      if (!overlaps) continue;
+
+      const otherFlex = other.Event_Flexibility || 'Busy';
+      const canOverlap = otherFlex === 'Passive' || otherFlex === 'Flexible';
+      if (!canOverlap) {
+        return res.status(409).json({
+          success: false,
+          error: `Proposed time conflicts with ${otherFlex} event: ${other.Event_Name}`,
+          conflictingEvent: {
+            id: other.ID,
+            name: other.Event_Name,
+            start: other.Event_Start_Date,
+            end: other.Event_End_Date,
+            flexibility: otherFlex
+          }
+        });
+      }
     }
 
     // Update in Google Calendar (automatically notifies attendees)

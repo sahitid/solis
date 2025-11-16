@@ -95,6 +95,10 @@ function findAvailableTimeSlots(
     const slotEnd = endTime instanceof Date ? endTime : new Date(endTime);
     
     for (const event of existingEvents) {
+      // Ignore all-day events entirely
+      if (event.isAllDay) {
+        continue;
+      }
       const eventStart = new Date(event.Event_Start_Date);
       const eventEnd = new Date(event.Event_End_Date);
       
