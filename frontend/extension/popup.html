@@ -100,6 +100,97 @@
     </div>
   </div>
 
+  <!-- Conflict Resolution Modal -->
+  <div id="conflictModal" class="modal" style="display: none;">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>⚠️ Scheduling Conflict</h3>
+        <button class="close-btn" id="closeModal">×</button>
+      </div>
+      
+      <div class="modal-body">
+        <!-- Initial AI Recommendation -->
+        <div id="aiRecommendation" class="modal-section" style="display: none;">
+          <div class="conflict-info">
+            <p id="conflictMessage"></p>
+          </div>
+          
+          <div class="ai-analysis">
+            <h4>🤖 AI Analysis</h4>
+            <p id="aiReason"></p>
+            <div class="confidence-badge" id="confidenceBadge"></div>
+          </div>
+          
+          <div class="best-slot" id="bestSlotSection" style="display: none;">
+            <h4>📅 Suggested Time</h4>
+            <div class="slot-card">
+              <div class="slot-time" id="suggestedTime"></div>
+              <div class="slot-reason" id="slotReason"></div>
+            </div>
+          </div>
+          
+          <div class="modal-actions">
+            <button class="btn-secondary" id="showOptionsBtn">Show More Options</button>
+            <button class="btn-primary" id="acceptSlotBtn" style="white-space: normal; line-height: 1.3;">Accept & Schedule</button>
+          </div>
+        </div>
+        
+        <!-- Decision Tree Options -->
+        <div id="decisionTree" class="modal-section" style="display: none;">
+          <h4>What would you like to do?</h4>
+          
+          <div class="decision-options">
+            <button class="decision-option" id="cancelOptionBtn">
+              <span class="option-icon">🗑️</span>
+              <div class="option-content">
+                <div class="option-title">Cancel Event</div>
+                <div class="option-desc">Remove this event from calendar</div>
+              </div>
+            </button>
+            
+            <button class="decision-option" id="differentDayBtn">
+              <span class="option-icon">📅</span>
+              <div class="option-content">
+                <div class="option-title">Move to Different Day</div>
+                <div class="option-desc">See best days available</div>
+              </div>
+            </button>
+            
+            <button class="decision-option" id="sameDayBtn">
+              <span class="option-icon">🕐</span>
+              <div class="option-content">
+                <div class="option-title">Keep Today, Different Time</div>
+                <div class="option-desc">Find another time slot today</div>
+              </div>
+            </button>
+          </div>
+          
+          <button class="btn-secondary full-width" id="backToAIBtn">← Back to Recommendation</button>
+        </div>
+        
+        <!-- Different Day View -->
+        <div id="differentDayView" class="modal-section" style="display: none;">
+          <h4>📅 Best Days Available</h4>
+          <div id="bestDaysList"></div>
+          <button class="btn-secondary full-width" id="backFromDaysBtn">← Back</button>
+        </div>
+        
+        <!-- Same Day View -->
+        <div id="sameDayView" class="modal-section" style="display: none;">
+          <h4>🕐 Available Times Today</h4>
+          <div id="sameDaySlotsList"></div>
+          <button class="btn-secondary full-width" id="backFromSameDayBtn">← Back</button>
+        </div>
+        
+        <!-- Loading State -->
+        <div id="modalLoading" class="modal-loading" style="display: none;">
+          <div class="loader-large"></div>
+          <p>Analyzing with AI...</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <script src="popup.js"></script>
 </body>
 </html>

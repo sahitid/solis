@@ -4,6 +4,9 @@
  */
 
 const { detectCascadeConflicts } = require('./conflictDetector');
+const { GoogleGenerativeAI } = require('@google/generative-ai');
+
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 /**
  * Find available time slots for rescheduling an event
@@ -33,13 +36,15 @@ function findAvailableTimeSlots(
 
   // Helper to check if time is within work hours
   const isWithinWorkHours = (dateTime, dayOfWeek) => {
+    // If no work hours preference, allow all times
     if (!userPreferences.Work_Hours) return true;
     
     const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
     const dayName = dayNames[dayOfWeek];
     const workHours = userPreferences.Work_Hours[dayName];
     
-    if (!workHours || !workHours.start || !workHours.end) return false;
+    // If no work hours defined for this day, allow all times (user can schedule anytime)
+    if (!workHours || !workHours.start || !workHours.end) return true;
     
     const timeStr = dateTime.toTimeString().substr(0, 5);
     return timeStr >= workHours.start && timeStr <= workHours.end;
@@ -83,12 +88,23 @@ function findAvailableTimeSlots(
   };
 
   // Helper to check if slot conflicts with existing events
+  // NOTE: Passive and Flexible events CAN be overlapped, so they're not conflicts
   const hasConflict = (startTime, endTime) => {
     for (const event of existingEvents) {
       const eventStart = new Date(event.Event_Start_Date);
       const eventEnd = new Date(event.Event_End_Date);
       
+      // Check if times overlap
       if (startTime < eventEnd && endTime > eventStart) {
+        // Allow overlap with Passive or Flexible events
+        const flexibility = event.Event_Flexibility || 'Busy';
+        if (flexibility === 'Passive' || flexibility === 'Flexible') {
+          console.log(`✅ Allowing overlap with ${flexibility} event: ${event.Event_Name}`);
+          continue; // This event can be overlapped, not a conflict
+        }
+        
+        // Rigid and Busy events are real conflicts
+        console.log(`❌ Conflict with ${flexibility} event: ${event.Event_Name}`);
         return true;
       }
     }
@@ -98,6 +114,12 @@ function findAvailableTimeSlots(
   // Search for available slots
   let currentDate = new Date(searchStart);
   currentDate.setHours(8, 0, 0, 0); // Start at 8 AM
+  
+  console.log(`🔍 Searching for slots from ${currentDate.toLocaleString()} to ${searchEnd.toLocaleString()}`);
+  console.log(`📏 Event duration: ${eventDuration} minutes`);
+  console.log(`📋 Existing events to check: ${existingEvents.length}`);
+  
+  let checkedSlots = 0;
   
   while (currentDate < searchEnd && slots.length < maxSlots) {
     const dayOfWeek = currentDate.getDay();
@@ -110,19 +132,23 @@ function findAvailableTimeSlots(
     
     const slotEnd = new Date(currentDate.getTime() + eventDurationMs);
     
+    checkedSlots++;
+    
     // Check all constraints
-    if (
-      isWithinWorkHours(slotEnd, dayOfWeek) &&
-      isBeforeBedtime(slotEnd, dayOfWeek) &&
-      !isInNoMeetingZone(currentDate, slotEnd, dayOfWeek) &&
-      !hasConflict(currentDate, slotEnd)
-    ) {
+    const passesWorkHours = isWithinWorkHours(slotEnd, dayOfWeek);
+    const passesBedtime = isBeforeBedtime(slotEnd, dayOfWeek);
+    const passesNoMeetingZone = !isInNoMeetingZone(currentDate, slotEnd, dayOfWeek);
+    const passesConflictCheck = !hasConflict(currentDate, slotEnd);
+    
+    if (passesWorkHours && passesBedtime && passesNoMeetingZone && passesConflictCheck) {
       // Calculate slot score (prefer earlier in day, closer to original date)
       const hourScore = 24 - currentDate.getHours(); // Prefer earlier
       const dayScore = sameDayOnly ? 100 : Math.max(0, searchDays - Math.floor((currentDate - searchStart) / (24 * 60 * 60 * 1000)));
       const preferredTimeScore = isInPreferredMeetingWindow(currentDate, slotEnd, userPreferences) ? 20 : 0;
       
       const score = hourScore + (dayScore * 10) + preferredTimeScore;
+      
+      console.log(`✅ Found slot: ${currentDate.toTimeString().substr(0, 5)} - ${slotEnd.toTimeString().substr(0, 5)} (score: ${score})`);
       
       slots.push({
         startDateTime: new Date(currentDate),
@@ -133,17 +159,26 @@ function findAvailableTimeSlots(
         score: score,
         reason: generateSlotReason(currentDate, slotEnd, dayOfWeek, preferredTimeScore > 0)
       });
+    } else {
+      // Log why this slot was rejected
+      if (!passesWorkHours) console.log(`❌ ${currentDate.toTimeString().substr(0, 5)}: Outside work hours`);
+      if (!passesBedtime) console.log(`❌ ${currentDate.toTimeString().substr(0, 5)}: Past bedtime`);
+      if (!passesNoMeetingZone) console.log(`❌ ${currentDate.toTimeString().substr(0, 5)}: In no-meeting zone`);
+      if (!passesConflictCheck) console.log(`❌ ${currentDate.toTimeString().substr(0, 5)}: Has conflict`);
     }
     
     // Move to next 30-minute slot
     currentDate.setMinutes(currentDate.getMinutes() + 30);
     
-    // If past 6 PM, move to next day at 8 AM
-    if (currentDate.getHours() >= 18) {
+    // If past 8 PM, move to next day at 8 AM
+    if (currentDate.getHours() >= 20) {
       currentDate.setDate(currentDate.getDate() + 1);
       currentDate.setHours(8, 0, 0, 0);
     }
   }
+  
+  console.log(`📊 Checked ${checkedSlots} slots, found ${slots.length} available`);
+
 
   // Sort by score (highest first)
   slots.sort((a, b) => b.score - a.score);
@@ -217,20 +252,30 @@ function findBestRescheduleSlot(eventDuration, targetDate, existingEvents, userP
 
 /**
  * Find best days for rescheduling (returns top 3 days with available slots)
+ * NOTE: Only returns dates AFTER the original date (not before)
  */
-function findBestDaysForRescheduling(eventDuration, existingEvents, userPreferences, searchDays = 14) {
+function findBestDaysForRescheduling(eventDuration, existingEvents, userPreferences, searchDays = 14, originalDate = null) {
   const daySlots = {};
   
   const slots = findAvailableTimeSlots(
     eventDuration,
-    null,
+    originalDate || new Date(), // Start from original date or today
     existingEvents,
     userPreferences,
     { maxSlots: 50, searchDays }
   );
   
+  // Only include dates >= original date (no dates before)
+  const originalDateOnly = originalDate ? new Date(originalDate).toISOString().split('T')[0] : null;
+  
   // Group slots by date
   for (const slot of slots) {
+    // IMPORTANT: Skip dates before the original date
+    if (originalDateOnly && slot.date < originalDateOnly) {
+      console.log(`⏭️ Skipping ${slot.date} (before original date ${originalDateOnly})`);
+      continue;
+    }
+    
     if (!daySlots[slot.date]) {
       daySlots[slot.date] = {
         date: slot.date,
@@ -245,6 +290,8 @@ function findBestDaysForRescheduling(eventDuration, existingEvents, userPreferen
   // Convert to array and sort by total score
   const daysArray = Object.values(daySlots);
   daysArray.sort((a, b) => b.totalScore - a.totalScore);
+  
+  console.log(`📅 Found ${daysArray.length} days with available slots (all >= ${originalDateOnly || 'today'})`);
   
   // Return top 3 days with their best slots
   return daysArray.slice(0, 3).map(day => ({
@@ -327,12 +374,82 @@ function validateRescheduleProposal(newTimeSlot, event, existingEvents, userPref
   };
 }
 
+/**
+ * Use Gemini AI to compare priority of two events based on their titles and descriptions
+ * Returns which event is more important and why
+ */
+async function compareEventPriorityWithAI(event1, event2) {
+  try {
+    const systemPrompt = `You are an expert at determining which calendar event is more important.
+Given two events, analyze their titles and descriptions to determine which one is higher priority.
+
+Consider factors like:
+- Professional obligations vs personal activities
+- Meetings with others vs solo tasks
+- Deadlines and time-sensitive tasks
+- Health and wellbeing (doctor appointments, etc.)
+- Career advancement opportunities
+- Financial obligations
+
+Return ONLY a JSON object with this structure:
+{
+  "higherPriorityEvent": 1 or 2,
+  "reason": "Brief explanation of why this event is more important",
+  "confidenceLevel": "high", "medium", or "low"
+}`;
+
+    const userPrompt = `Event 1:
+Title: ${event1.Event_Name || event1.title}
+Description: ${event1.Event_Description || event1.description || 'None'}
+Has attendees: ${(event1.Event_Guests || event1.attendees || []).length > 0}
+
+Event 2:
+Title: ${event2.Event_Name || event2.title}
+Description: ${event2.Event_Description || event2.description || 'None'}
+Has attendees: ${(event2.Event_Guests || event2.attendees || []).length > 0}
+
+Which event is more important?`;
+
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
+    const result = await model.generateContent(systemPrompt + '\n\n' + userPrompt);
+    const response = await result.response;
+    const text = response.text();
+
+    // Parse JSON response
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      throw new Error('Failed to parse AI response');
+    }
+
+    const parsed = JSON.parse(jsonMatch[0]);
+    
+    return {
+      success: true,
+      higherPriorityEvent: parsed.higherPriorityEvent,
+      reason: parsed.reason,
+      confidenceLevel: parsed.confidenceLevel
+    };
+
+  } catch (error) {
+    console.error('AI priority comparison error:', error);
+    return {
+      success: false,
+      error: error.message,
+      // Fallback to basic comparison
+      higherPriorityEvent: (event1.Event_Priority || 2) > (event2.Event_Priority || 2) ? 1 : 2,
+      reason: 'Using priority values (AI unavailable)',
+      confidenceLevel: 'low'
+    };
+  }
+}
+
 module.exports = {
   findAvailableTimeSlots,
   findBestRescheduleSlot,
   findBestDaysForRescheduling,
   calculateEventDuration,
   validateRescheduleProposal,
-  isInPreferredMeetingWindow
+  isInPreferredMeetingWindow,
+  compareEventPriorityWithAI
 };
 

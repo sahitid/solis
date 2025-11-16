@@ -4,6 +4,8 @@ const API_BASE = 'http://localhost:5000/api';
 
 // State
 let currentUser = null;
+let conflictData = null;
+let currentEventData = null;
 
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
@@ -104,6 +106,17 @@ function setupEventListeners() {
     document.getElementById('eventForm').reset();
     setDefaultDates();
   });
+  
+  // Modal event listeners
+  document.getElementById('closeModal').addEventListener('click', closeConflictModal);
+  document.getElementById('acceptSlotBtn').addEventListener('click', handleAcceptSlot);
+  document.getElementById('showOptionsBtn').addEventListener('click', showDecisionTree);
+  document.getElementById('backToAIBtn').addEventListener('click', showAIRecommendation);
+  document.getElementById('cancelOptionBtn').addEventListener('click', handleCancelEvent);
+  document.getElementById('differentDayBtn').addEventListener('click', showDifferentDayOptions);
+  document.getElementById('sameDayBtn').addEventListener('click', showSameDayOptions);
+  document.getElementById('backFromDaysBtn').addEventListener('click', showDecisionTree);
+  document.getElementById('backFromSameDayBtn').addEventListener('click', showDecisionTree);
 }
 
 // Handle login (web-based OAuth)
@@ -237,8 +250,13 @@ async function handleEventSubmit(e) {
       showMessage('✅ Event added to your calendar!', 'success');
       document.getElementById('eventForm').reset();
       setDefaultDates();
-    } else if (response.status === 409) {
-      showMessage(`⚠️ Conflict detected with ${data.conflictCount} event(s)!`, 'warning');
+    } else if (response.status === 409 && data.hasConflicts) {
+      // Store event data and conflict info
+      currentEventData = eventData;
+      conflictData = data;
+      
+      // Show conflict resolution modal
+      await handleConflict(eventData, data.conflicts[0]);
     } else {
       throw new Error(data.error || 'Failed to create event');
     }
@@ -274,5 +292,507 @@ function showMessage(text, type) {
   setTimeout(() => {
     messageEl.style.display = 'none';
   }, 5000);
+}
+
+// ==================== CONFLICT RESOLUTION ====================
+
+// Handle conflict - analyze with AI
+async function handleConflict(newEventData, conflictInfo) {
+  console.log('🔍 handleConflict called');
+  console.log('📝 New event data:', newEventData);
+  console.log('⚠️ Conflict info:', conflictInfo);
+  
+  // Show modal with loading
+  showConflictModal();
+  showModalLoading();
+  
+  try {
+    // Call AI analysis endpoint
+    console.log('🤖 Calling AI analysis endpoint...');
+    const payload = {
+      email: currentUser.Email,
+      newEventData: newEventData,
+      conflictingEventId: conflictInfo.conflictingEvent.id
+    };
+    console.log('📦 Payload:', payload);
+    
+    const response = await fetch(`${API_BASE}/reschedule-decision/analyze-conflict`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    
+    console.log('📬 Response status:', response.status);
+    const data = await response.json();
+    console.log('📊 Response data:', data);
+    
+    if (data.success) {
+      hideModalLoading();
+      displayAIRecommendation(data.analysis, conflictInfo);
+    } else {
+      throw new Error(data.error || 'Failed to analyze conflict');
+    }
+    
+  } catch (error) {
+    console.error('❌ Conflict analysis error:', error);
+    hideModalLoading();
+    closeConflictModal();
+    showMessage('❌ Failed to analyze conflict: ' + error.message, 'error');
+  }
+}
+
+// Display AI recommendation
+function displayAIRecommendation(analysis, conflictInfo) {
+  console.log('📊 Displaying AI recommendation with analysis:', analysis);
+  
+  const conflictMessage = document.getElementById('conflictMessage');
+  const aiReason = document.getElementById('aiReason');
+  const confidenceBadge = document.getElementById('confidenceBadge');
+  const suggestedTime = document.getElementById('suggestedTime');
+  const slotReason = document.getElementById('slotReason');
+  const bestSlotSection = document.getElementById('bestSlotSection');
+  const acceptBtn = document.getElementById('acceptSlotBtn');
+  
+  // Determine which event is being moved
+  const isMovingNewEvent = analysis.recommendation.action === 'move_new_event';
+  const eventBeingMoved = analysis.recommendation.eventToMove.name;
+  const eventBeingKept = analysis.recommendation.eventToKeep.name;
+  
+  // Set conflict message with clear indication of what will happen
+  if (isMovingNewEvent) {
+    conflictMessage.textContent = `Your new event "${currentEventData.title}" conflicts with "${conflictInfo.conflictingEvent.name}". We'll move "${eventBeingMoved}" to resolve the conflict.`;
+  } else {
+    conflictMessage.textContent = `Your new event "${currentEventData.title}" conflicts with "${conflictInfo.conflictingEvent.name}". We'll move "${eventBeingMoved}" and keep your new event at the original time.`;
+  }
+  
+  // Set AI analysis
+  aiReason.textContent = analysis.aiPriorityComparison.reason;
+  
+  // Set confidence badge
+  const confidence = analysis.aiPriorityComparison.confidenceLevel;
+  confidenceBadge.textContent = `${confidence} confidence`;
+  confidenceBadge.className = `confidence-badge confidence-${confidence}`;
+  
+  // Show best slot if available
+  if (analysis.sameDayBestSlot) {
+    console.log('✅ Found same-day slot:', analysis.sameDayBestSlot);
+    const slot = analysis.sameDayBestSlot;
+    const startTime = new Date(slot.startDateTime).toLocaleTimeString('en-US', { 
+      hour: 'numeric', 
+      minute: '2-digit' 
+    });
+    const endTime = new Date(slot.endDateTime).toLocaleTimeString('en-US', { 
+      hour: 'numeric', 
+      minute: '2-digit' 
+    });
+    
+    // Make it CRYSTAL CLEAR which event is moving where
+    if (isMovingNewEvent) {
+      // New event is lower priority - it's being moved
+      suggestedTime.textContent = `Move "${eventBeingMoved}" to ${startTime} - ${endTime}`;
+      slotReason.textContent = `"${eventBeingKept}" stays at original time`;
+    } else {
+      // Existing event is lower priority - it's being moved
+      suggestedTime.textContent = `Move "${eventBeingMoved}" to ${startTime} - ${endTime}`;
+      slotReason.textContent = `Your "${currentEventData.title}" will be scheduled at your requested time`;
+    }
+    
+    bestSlotSection.style.display = 'block';
+    acceptBtn.style.display = 'inline-flex';
+    
+    // Update accept button text to be more descriptive
+    acceptBtn.textContent = isMovingNewEvent 
+      ? `Move My Event to ${startTime}`
+      : `Move "${eventBeingMoved}" & Keep Mine`;
+    
+    // Store suggested slot
+    analysis.sameDayBestSlot.formatted = { startTime, endTime };
+  } else {
+    console.log('⚠️ No same-day slot found, hiding suggestion');
+    bestSlotSection.style.display = 'none';
+    acceptBtn.style.display = 'none';
+    
+    // Update message to tell user to explore options
+    aiReason.textContent += ' No same-day slots available. Click "Show More Options" to see alternative days.';
+  }
+  
+  // Store analysis for later use
+  conflictData.analysis = analysis;
+  
+  // Show AI recommendation section
+  showAIRecommendation();
+}
+
+// Show conflict modal
+function showConflictModal() {
+  document.getElementById('conflictModal').style.display = 'flex';
+}
+
+// Close conflict modal
+function closeConflictModal() {
+  document.getElementById('conflictModal').style.display = 'none';
+  conflictData = null;
+  currentEventData = null;
+}
+
+// Show/hide modal sections
+function hideAllModalSections() {
+  document.getElementById('aiRecommendation').style.display = 'none';
+  document.getElementById('decisionTree').style.display = 'none';
+  document.getElementById('differentDayView').style.display = 'none';
+  document.getElementById('sameDayView').style.display = 'none';
+  document.getElementById('modalLoading').style.display = 'none';
+}
+
+function showModalLoading() {
+  hideAllModalSections();
+  document.getElementById('modalLoading').style.display = 'flex';
+}
+
+function hideModalLoading() {
+  document.getElementById('modalLoading').style.display = 'none';
+}
+
+function showAIRecommendation() {
+  hideAllModalSections();
+  document.getElementById('aiRecommendation').style.display = 'block';
+}
+
+function showDecisionTree() {
+  hideAllModalSections();
+  document.getElementById('decisionTree').style.display = 'block';
+}
+
+// Handle accept suggested slot
+async function handleAcceptSlot() {
+  console.log('🔵 handleAcceptSlot called!');
+  console.log('🔵 conflictData:', conflictData);
+  console.log('🔵 currentEventData:', currentEventData);
+  
+  if (!conflictData || !conflictData.analysis || !conflictData.analysis.sameDayBestSlot) {
+    console.error('❌ No slot data available');
+    alert('Error: No time slot data available. Please try again.');
+    showMessage('❌ No time slot selected', 'error');
+    return;
+  }
+  
+  console.log('✅ Slot data exists, showing loading...');
+  showModalLoading();
+  
+  try {
+    const slot = conflictData.analysis.sameDayBestSlot;
+    const recommendation = conflictData.analysis.recommendation;
+    
+    console.log('📅 Suggested slot:', slot);
+    console.log('🎯 Recommendation:', recommendation);
+    
+    // Check which event we're moving
+    const movingNewEvent = recommendation.action === 'move_new_event';
+    
+    if (movingNewEvent) {
+      // CASE 1: New event is LOWER priority - move it to suggested slot
+      console.log('➡️ Moving NEW event to suggested slot');
+      
+      const response = await fetch(`${API_BASE}/events/create`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: currentUser.Email,
+          eventData: {
+            ...currentEventData,
+            startDateTime: slot.startDateTime,
+            endDateTime: slot.endDateTime
+          },
+          skipConflictCheck: true
+        })
+      });
+      
+      const data = await response.json();
+      
+      if (response.ok && data.success) {
+        closeConflictModal();
+        showMessage(`✅ Event scheduled for ${slot.formatted.startTime}!`, 'success');
+        document.getElementById('eventForm').reset();
+        setDefaultDates();
+      } else {
+        throw new Error(data.error || 'Failed to schedule event');
+      }
+      
+    } else {
+      // CASE 2: New event is HIGHER priority - move EXISTING event, schedule new event at original time
+      console.log('🔥 CASE 2: Moving EXISTING event, keeping new event at original time');
+      console.log('📋 Conflicting event ID:', conflictData.conflicts[0].conflictingEvent.id);
+      console.log('📋 Event to move:', recommendation.eventToMove.name);
+      console.log('📋 Event to keep:', recommendation.eventToKeep.name);
+      console.log('📋 New time slot:', slot.startDateTime, 'to', slot.endDateTime);
+      
+      const conflictingEventId = conflictData.conflicts[0].conflictingEvent.id;
+      
+      // Step 1: Move existing event to suggested slot
+      console.log('📦 Step 1: Moving existing event to new slot...');
+      console.log('🔹 Calling /move-manual with:', {
+        email: currentUser.Email,
+        eventId: conflictingEventId,
+        newTimeSlot: {
+          startDateTime: slot.startDateTime,
+          endDateTime: slot.endDateTime
+        }
+      });
+      
+      const moveResponse = await fetch(`${API_BASE}/reschedule-decision/move-manual`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: currentUser.Email,
+          eventId: conflictingEventId,
+          newTimeSlot: {
+            startDateTime: slot.startDateTime,
+            endDateTime: slot.endDateTime
+          },
+          userApproved: true
+        })
+      });
+      
+      console.log('📬 Move response status:', moveResponse.status);
+      const moveData = await moveResponse.json();
+      console.log('📊 Move response data:', moveData);
+      
+      if (!moveResponse.ok || !moveData.success) {
+        console.error('❌ Failed to move existing event:', moveData);
+        throw new Error(moveData.error || 'Failed to move existing event');
+      }
+      
+      console.log('✅ Existing event moved successfully to', slot.startDateTime);
+      
+      // Step 2: Schedule new event at its ORIGINAL time
+      console.log('📦 Step 2: Scheduling new event at ORIGINAL time...');
+      console.log('🔹 Original event data:', currentEventData);
+      
+      const createResponse = await fetch(`${API_BASE}/events/create`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: currentUser.Email,
+          eventData: currentEventData, // Use original time
+          skipConflictCheck: true
+        })
+      });
+      
+      console.log('📬 Create response status:', createResponse.status);
+      const createData = await createResponse.json();
+      console.log('📊 Create response data:', createData);
+      
+      if (createResponse.ok && createData.success) {
+        console.log('✅✅ SUCCESS! Both operations completed');
+        // Save the event title before closing modal (which clears currentEventData)
+        const newEventTitle = currentEventData.title;
+        const successMsg = `✅ "${recommendation.eventToMove.name}" moved to ${slot.formatted.startTime}, your "${newEventTitle}" scheduled at original time!`;
+        closeConflictModal();
+        showMessage(successMsg, 'success');
+        document.getElementById('eventForm').reset();
+        setDefaultDates();
+      } else {
+        console.error('❌ Failed to create new event:', createData);
+        throw new Error(createData.error || 'Failed to schedule new event');
+      }
+    }
+    
+  } catch (error) {
+    console.error('❌ Schedule error:', error);
+    alert(`Error scheduling event: ${error.message}`);
+    hideModalLoading();
+    showMessage('❌ ' + error.message, 'error');
+  }
+}
+
+// Show different day options
+async function showDifferentDayOptions() {
+  showModalLoading();
+  
+  try {
+    // For new events, we need to get the first conflicting event ID
+    const conflictingEventId = conflictData.conflicts[0].conflictingEvent.id;
+    
+    const response = await fetch(`${API_BASE}/reschedule-decision/get-broad-options`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: currentUser.Email,
+        eventId: conflictingEventId
+      })
+    });
+    
+    const data = await response.json();
+    
+    if (data.success && data.options.differentDay.bestDays) {
+      displayBestDays(data.options.differentDay.bestDays);
+      hideModalLoading();
+      hideAllModalSections();
+      document.getElementById('differentDayView').style.display = 'block';
+    } else {
+      throw new Error('No alternative days found');
+    }
+    
+  } catch (error) {
+    console.error('Get days error:', error);
+    hideModalLoading();
+    showMessage('❌ ' + error.message, 'error');
+  }
+}
+
+// Display best days
+function displayBestDays(bestDays) {
+  const listEl = document.getElementById('bestDaysList');
+  listEl.innerHTML = '';
+  
+  bestDays.forEach(day => {
+    const dayDiv = document.createElement('div');
+    dayDiv.className = 'day-option';
+    
+    const headerDiv = document.createElement('div');
+    headerDiv.className = 'day-header';
+    
+    const dayName = document.createElement('div');
+    dayName.className = 'day-name';
+    dayName.textContent = `${day.dayOfWeek}, ${new Date(day.date).toLocaleDateString()}`;
+    
+    const slotCount = document.createElement('div');
+    slotCount.className = 'slot-count';
+    slotCount.textContent = `${day.availableSlots.length} slots`;
+    
+    headerDiv.appendChild(dayName);
+    headerDiv.appendChild(slotCount);
+    
+    const slotsDiv = document.createElement('div');
+    slotsDiv.className = 'time-slots';
+    
+    day.availableSlots.slice(0, 3).forEach(slot => {
+      const chip = document.createElement('span');
+      chip.className = 'time-chip';
+      chip.textContent = slot.startTime;
+      chip.onclick = () => scheduleAtTime(slot);
+      slotsDiv.appendChild(chip);
+    });
+    
+    dayDiv.appendChild(headerDiv);
+    dayDiv.appendChild(slotsDiv);
+    listEl.appendChild(dayDiv);
+  });
+}
+
+// Show same day options
+async function showSameDayOptions() {
+  showModalLoading();
+  
+  try {
+    const conflictingEventId = conflictData.conflicts[0].conflictingEvent.id;
+    
+    const response = await fetch(`${API_BASE}/reschedule-decision/get-broad-options`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: currentUser.Email,
+        eventId: conflictingEventId
+      })
+    });
+    
+    const data = await response.json();
+    
+    if (data.success && data.options.sameDay.availableSlots) {
+      displaySameDaySlots(data.options.sameDay.availableSlots);
+      hideModalLoading();
+      hideAllModalSections();
+      document.getElementById('sameDayView').style.display = 'block';
+    } else {
+      throw new Error('No same-day slots found');
+    }
+    
+  } catch (error) {
+    console.error('Get slots error:', error);
+    hideModalLoading();
+    showMessage('❌ ' + error.message, 'error');
+  }
+}
+
+// Display same day slots
+function displaySameDaySlots(slots) {
+  const listEl = document.getElementById('sameDaySlotsList');
+  listEl.innerHTML = '';
+  
+  slots.forEach(slot => {
+    const slotDiv = document.createElement('div');
+    slotDiv.className = 'slot-card';
+    slotDiv.style.marginBottom = '10px';
+    
+    const timeDiv = document.createElement('div');
+    timeDiv.className = 'slot-time';
+    timeDiv.textContent = `${slot.startTime} - ${slot.endTime}`;
+    
+    const reasonDiv = document.createElement('div');
+    reasonDiv.className = 'slot-reason';
+    reasonDiv.textContent = slot.reason || 'Available';
+    
+    slotDiv.appendChild(timeDiv);
+    slotDiv.appendChild(reasonDiv);
+    slotDiv.onclick = () => scheduleAtTime(slot);
+    
+    listEl.appendChild(slotDiv);
+  });
+}
+
+// Schedule at specific time
+async function scheduleAtTime(slot) {
+  showModalLoading();
+  
+  try {
+    console.log('Scheduling at slot:', slot);
+    
+    const response = await fetch(`${API_BASE}/events/create`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: currentUser.Email,
+        eventData: {
+          ...currentEventData,
+          startDateTime: slot.startDateTime,
+          endDateTime: slot.endDateTime
+        },
+        skipConflictCheck: true // Skip check since this is a suggested available slot
+      })
+    });
+    
+    const data = await response.json();
+    
+    console.log('Response:', response.status, data);
+    
+    if (response.ok && data.success) {
+      closeConflictModal();
+      showMessage(`✅ Event scheduled for ${slot.startTime}!`, 'success');
+      document.getElementById('eventForm').reset();
+      setDefaultDates();
+    } else if (response.status === 409) {
+      hideModalLoading();
+      showMessage('⚠️ This time also has a conflict. Try another option.', 'warning');
+    } else {
+      throw new Error(data.error || 'Failed to schedule event');
+    }
+    
+  } catch (error) {
+    console.error('Schedule error:', error);
+    hideModalLoading();
+    showMessage('❌ ' + error.message, 'error');
+  }
+}
+
+// Handle cancel event
+async function handleCancelEvent() {
+  if (!confirm('Are you sure you want to cancel this event?')) {
+    return;
+  }
+  
+  closeConflictModal();
+  showMessage('✅ Event not scheduled', 'success');
+  document.getElementById('eventForm').reset();
+  setDefaultDates();
 }
 

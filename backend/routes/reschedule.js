@@ -8,7 +8,8 @@ const {
   findBestDaysForRescheduling,
   findAvailableTimeSlots,
   calculateEventDuration,
-  validateRescheduleProposal
+  validateRescheduleProposal,
+  compareEventPriorityWithAI
 } = require('../services/rescheduler');
 const {
   sendRescheduleProposal,

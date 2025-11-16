@@ -6,6 +6,7 @@ const authRoutes = require('./routes/auth');
 const eventsRoutes = require('./routes/events');
 const conflictsRoutes = require('./routes/conflicts');
 const rescheduleRoutes = require('./routes/reschedule');
+const rescheduleDecisionRoutes = require('./routes/rescheduleDecisionTree');
 const { startPeriodicSync } = require('./utils/syncScheduler');
 
 const app = express();
@@ -40,6 +41,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/events', eventsRoutes);
 app.use('/api/conflicts', conflictsRoutes);
 app.use('/api/reschedule', rescheduleRoutes);
+app.use('/api/reschedule-decision', rescheduleDecisionRoutes);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {

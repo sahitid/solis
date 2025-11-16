@@ -46,8 +46,12 @@ npm run dev
 
 ## 📖 Documentation
 
-- **[FINAL_SETUP_STEPS.md](FINAL_SETUP_STEPS.md)** - Complete setup guide
-- **[EXTENSION_SETUP.md](EXTENSION_SETUP.md)** - Extension setup details
+### Quick Start & Usage
+- **[FRONTEND_INTEGRATION_COMPLETE.md](FRONTEND_INTEGRATION_COMPLETE.md)** - ⭐ **START HERE!** Complete user guide
+- **[RESCHEDULE_QUICK_START.md](RESCHEDULE_QUICK_START.md)** - Quick start guide for rescheduling
+
+### Technical Documentation
+- **[RESCHEDULING_SYSTEM.md](RESCHEDULING_SYSTEM.md)** - Complete API reference & technical details
 - **[REFACTOR_SUMMARY.md](REFACTOR_SUMMARY.md)** - What changed in recent refactor
 
 ---
