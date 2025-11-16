@@ -24,7 +24,6 @@ body {
   align-items: center;
   justify-content: center;
   background: #EBEBEB;
-  padding: 40px 20px;
 }
 
 .login-container {
@@ -33,9 +32,11 @@ body {
 }
 
 .logo {
-  font-size: 64px;
-  margin-bottom: 16px;
-  animation: pulse 2s ease-in-out infinite;
+  display: inline-block;
+  max-width: 350px;
+  height: auto;
+  object-fit: contain;
+  padding-bottom: 20px;
 }
 
 @keyframes pulse {
@@ -44,7 +45,8 @@ body {
 }
 
 .login-container h1 {
-  font-size: 32px;
+  font-size: 25px;
+  margin-top: 4px; /* tighten space above header, below logo */
   margin-bottom: 8px;
   font-weight: 700;
 }
@@ -87,8 +89,11 @@ body {
   width: 40px;
   height: 40px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #FF8934 0%, #FFAB41 100%);
-  color: white;
+  background: none;
+  background-image: url('logos/circle.png');
+  background-size: cover;
+  background-position: center;
+  color: transparent; /* hide initial letter */
   display: flex;
   align-items: center;
   justify-content: center;
@@ -231,6 +236,38 @@ button {
 
 .btn-icon:hover {
   background: rgba(0, 0, 0, 0.05);
+}
+
+.logout-btn-icon {
+  padding: 8px;
+  background: #e53935; /* red */
+  color: white;        /* ensure icon/text stays visible */
+  font-size: 18px;
+  border-radius: 6px;  /* optional but looks nicer */
+}
+
+.logout-btn-icon:hover {
+  background: #c62828; /* darker red */
+}
+
+/* Ensure header logout button styling wins over generic button styles */
+.header .logout-btn-icon {
+  background: #e53935;
+  color: #FFFFFF;
+  border: none;
+  padding: 8px 12px;
+  min-height: 32px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  border-radius: 6px;
+}
+
+.header .logout-btn-icon:hover {
+  background: #c62828;
+  transform: none; /* override global hover lift for a solid button feel */
 }
 
 button:disabled {

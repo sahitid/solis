@@ -1,4 +1,5 @@
 const express = require('express');
+const path = require('path');
 const router = express.Router();
 const { google } = require('googleapis');
 const User = require('../models/User');
@@ -31,49 +32,79 @@ router.get('/success', (req, res) => {
     <html>
     <head>
       <title>Solis - Sign In Success</title>
+      <link rel="preconnect" href="https://fonts.googleapis.com">
+      <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+      <link href="https://fonts.googleapis.com/css2?family=Lexend+Deca:wght@300;400;500;600;700&display=swap" rel="stylesheet">
       <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
-          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
-          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+          font-family: "Lexend Deca", -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+          background: #EBEBEB;
           display: flex;
           align-items: center;
           justify-content: center;
           min-height: 100vh;
-          color: white;
+          color: #262626;
         }
-        .container { text-align: center; max-width: 500px; padding: 40px; }
-        .logo { font-size: 80px; margin-bottom: 24px; animation: bounce 1s ease-in-out; }
-        @keyframes bounce {
-          0%, 100% { transform: translateY(0); }
-          50% { transform: translateY(-20px); }
+        .container { text-align: center; max-width: 500px; padding: 40px 20px; }
+        .brand-logo {
+          display: inline-block;
+          max-width: 480px;
+          width: 70%;
+          height: auto;
+          margin-bottom: 12px;
+          object-fit: contain;
         }
-        h1 { font-size: 32px; margin-bottom: 16px; }
-        p { font-size: 18px; opacity: 0.9; margin-bottom: 32px; }
+        h1 { display: none; }
+        p { font-size: 16px; color: #2F2F2F; margin-bottom: 24px; }
         .status {
-          background: rgba(255, 255, 255, 0.2);
-          padding: 16px 24px;
+          background: #FFFFFF;
+          padding: 20px 24px;
           border-radius: 12px;
-          backdrop-filter: blur(10px);
+          border: 1px solid #D8D8D8;
           margin-bottom: 24px;
+          box-shadow: 0 4px 16px rgba(0,0,0,0.08);
         }
         .spinner {
           width: 40px;
           height: 40px;
-          border: 4px solid rgba(255, 255, 255, 0.3);
-          border-top-color: white;
+          border: 4px solid #D8D8D8;
+          border-top-color: #FF8934;
           border-radius: 50%;
           animation: spin 1s linear infinite;
           margin: 0 auto 16px;
         }
         @keyframes spin { to { transform: rotate(360deg); } }
-        .success-icon { font-size: 48px; margin-bottom: 16px; }
-        .error { background: rgba(255, 0, 0, 0.2); }
+        .success-icon { font-size: 44px; margin-bottom: 12px; }
+        .error {
+          background: #f8d7da;
+          padding: 16px;
+          border-radius: 8px;
+          margin-top: 16px;
+          border: 1px solid #f5c6cb;
+          color: #721c24;
+        }
+        .close-btn {
+          background: #FF8934;
+          color: #FFFFFF;
+          border: none;
+          padding: 12px 32px;
+          border-radius: 8px;
+          font-size: 16px;
+          font-weight: 600;
+          cursor: pointer;
+          transition: transform 0.2s;
+        }
+        .close-btn:hover {
+          transform: translateY(-2px);
+          background: #FFAB41;
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        }
       </style>
     </head>
     <body>
       <div class="container">
-        <div class="logo">☀️</div>
+        <img class="brand-logo" src="/api/auth/logo-rectangular.png" alt="Solis logo" />
         <h1>Solis</h1>
         
         <div id="status" class="status">
@@ -89,7 +120,7 @@ router.get('/success', (req, res) => {
         const statusDiv = document.getElementById('status');
         
         if (error) {
-          statusDiv.innerHTML = '<div class="success-icon">❌</div><p><strong>Sign in failed</strong></p><p style="font-size: 14px;">Please close this tab and try again.</p>';
+          statusDiv.innerHTML = '<p><strong>Sign in failed</strong></p><p style="font-size: 14px;">Please close this tab and try again.</p><button class="close-btn" onclick="window.close()">Close Tab</button>';
         } else if (userDataEncoded) {
           try {
             const userData = JSON.parse(decodeURIComponent(userDataEncoded));
@@ -110,7 +141,7 @@ router.get('/success', (req, res) => {
             // Also save to localStorage as backup
             localStorage.setItem('solis_user', JSON.stringify(userData));
             
-            statusDiv.innerHTML = '<div class="success-icon">✅</div><p><strong>Sign in successful!</strong></p><p style="font-size: 14px;">Click the Solis extension icon to continue.</p><p style="font-size: 12px; margin-top: 16px;">You can close this tab now.</p>';
+            statusDiv.innerHTML = '<p>Sign in successful!</p><p style="font-size: 14px;">Click the Solis extension icon to continue.</p><p style="font-size: 12px; margin-top: 16px; color: #2F2F2F;">You can close this tab now.</p><button class="close-btn" onclick="window.close()">Close Tab</button>';
             
             // Auto-close after 5 seconds
             setTimeout(() => {
@@ -126,6 +157,11 @@ router.get('/success', (req, res) => {
     </body>
     </html>
   `);
+});
+
+// Serve rectangular logo for success page
+router.get('/logo-rectangular.png', (req, res) => {
+  res.sendFile(path.resolve(__dirname, '../logos/rectangular.png'));
 });
 
 router.get('/callback', async (req, res) => {
