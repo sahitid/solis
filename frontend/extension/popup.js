@@ -665,14 +665,41 @@ function displayBestDays(bestDays) {
     
     const slotsDiv = document.createElement('div');
     slotsDiv.className = 'time-slots';
+    slotsDiv.style.cssText = 'display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px;';
     
+    // Show top 3 available slots for this day (sorted by score, best first)
     day.availableSlots.slice(0, 3).forEach(slot => {
-      const chip = document.createElement('span');
+      const chip = document.createElement('button');
       chip.className = 'time-chip';
-      chip.textContent = slot.startTime;
-      chip.onclick = () => scheduleAtTime(slot);
+      chip.style.cssText = 'padding: 8px 12px; background: #4CAF50; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 500; transition: all 0.2s;';
+      chip.textContent = `${slot.startTime} - ${slot.endTime}`;
+      chip.title = `Click to schedule at ${slot.startTime} - ${slot.endTime}`;
+      
+      // Add hover effect
+      chip.onmouseenter = () => {
+        chip.style.background = '#45a049';
+        chip.style.transform = 'scale(1.05)';
+      };
+      chip.onmouseleave = () => {
+        chip.style.background = '#4CAF50';
+        chip.style.transform = 'scale(1)';
+      };
+      
+      chip.onclick = () => {
+        console.log('Selected time slot:', slot);
+        scheduleAtTime(slot);
+      };
+      
       slotsDiv.appendChild(chip);
     });
+    
+    // Add a note if there are many slots
+    if (day.availableSlots.length === 0) {
+      const noSlotsMsg = document.createElement('div');
+      noSlotsMsg.style.cssText = 'color: #999; font-size: 12px; font-style: italic; margin-top: 8px;';
+      noSlotsMsg.textContent = 'No available slots found for this day';
+      slotsDiv.appendChild(noSlotsMsg);
+    }
     
     dayDiv.appendChild(headerDiv);
     dayDiv.appendChild(slotsDiv);

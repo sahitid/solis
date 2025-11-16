@@ -80,10 +80,27 @@ async function getCalendarEvents(userTokens, startDate, endDate) {
     };
 
   } catch (error) {
+    // Handle OAuth errors specifically
+    const errorMessage = error.message || '';
+    const errorCode = error.code || error.status || '';
+    
+    if (errorMessage.includes('invalid_grant') || 
+        errorMessage.includes('invalid_token') ||
+        errorCode === 401 ||
+        (error.response && error.response.data && error.response.data.error === 'invalid_grant')) {
+      console.error('Calendar events fetch error: Invalid or expired OAuth token');
+      return {
+        success: false,
+        error: 'Invalid or expired OAuth token - reauthentication required',
+        requiresReauth: true,
+        events: []
+      };
+    }
+    
     console.error('Calendar events fetch error:', error);
     return {
       success: false,
-      error: error.message,
+      error: errorMessage || 'Unknown error fetching calendar events',
       events: []
     };
   }

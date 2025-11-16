@@ -19,6 +19,17 @@ async function syncUserCalendar(email) {
       };
     }
 
+    // Skip test/placeholder tokens
+    if (user.OAuth_Token.refresh_token === 'test-refresh' || 
+        user.OAuth_Token.access_token === 'test-token' ||
+        user.OAuth_Token.refresh_token?.startsWith('test-')) {
+      console.log(`Skipping sync for ${email}: Test/placeholder token detected`);
+      return {
+        success: false,
+        error: 'Test/placeholder token - skipping sync'
+      };
+    }
+
     // Get events from the last 7 days and next 60 days
     const startDate = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
     const endDate = new Date(Date.now() + 60 * 24 * 60 * 60 * 1000);
@@ -26,10 +37,20 @@ async function syncUserCalendar(email) {
     const calendarResult = await getCalendarEvents(user.OAuth_Token, startDate, endDate);
 
     if (!calendarResult.success) {
-      console.error(`Failed to fetch calendar events for ${email}:`, calendarResult.error);
+      // Handle OAuth errors gracefully
+      const errorMessage = calendarResult.error || '';
+      if (errorMessage.includes('invalid_grant') || errorMessage.includes('invalid_token')) {
+        console.log(`Skipping sync for ${email}: Invalid or expired OAuth token (${errorMessage})`);
+        return {
+          success: false,
+          error: 'Invalid or expired OAuth token',
+          requiresReauth: true
+        };
+      }
+      console.error(`Failed to fetch calendar events for ${email}:`, errorMessage);
       return {
         success: false,
-        error: calendarResult.error
+        error: errorMessage
       };
     }
 
@@ -143,26 +164,50 @@ async function syncAllUsers() {
       'OAuth_Token.access_token': { $exists: true, $ne: '' }
     });
 
-    console.log(`Starting sync for ${users.length} users...`);
+    // Filter out users with test/placeholder tokens
+    const validUsers = users.filter(user => {
+      const token = user.OAuth_Token;
+      return token && 
+             token.access_token && 
+             token.access_token !== 'test-token' &&
+             (!token.refresh_token || 
+              (token.refresh_token !== 'test-refresh' && !token.refresh_token.startsWith('test-')));
+    });
+
+    console.log(`Starting sync for ${validUsers.length} users (${users.length - validUsers.length} skipped due to test tokens)...`);
 
     const results = [];
     
-    for (const user of users) {
-      const result = await syncUserCalendar(user.Email);
-      results.push({
-        email: user.Email,
-        ...result
-      });
+    for (const user of validUsers) {
+      try {
+        const result = await syncUserCalendar(user.Email);
+        results.push({
+          email: user.Email,
+          ...result
+        });
+      } catch (error) {
+        // Catch any unexpected errors and continue with other users
+        console.error(`Unexpected error syncing ${user.Email}:`, error.message);
+        results.push({
+          email: user.Email,
+          success: false,
+          error: error.message
+        });
+      }
 
       // Add delay between users to avoid rate limiting
       await new Promise(resolve => setTimeout(resolve, 1000));
     }
 
-    console.log('All users synced');
+    const successCount = results.filter(r => r.success).length;
+    const failCount = results.length - successCount;
+    console.log(`Sync completed: ${successCount} succeeded, ${failCount} failed`);
 
     return {
       success: true,
-      userCount: users.length,
+      userCount: validUsers.length,
+      successCount,
+      failCount,
       results
     };
 

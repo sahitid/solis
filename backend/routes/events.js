@@ -120,16 +120,38 @@ router.post('/create', async (req, res) => {
         var existingEvents = calendarResult.events.map(gcalEvent => {
           const dbEvent = dbEventMap.get(gcalEvent.id);
           
+          // Handle all-day events: Google Calendar uses 'date' (not 'dateTime') for all-day events
+          // For all-day events, 'date' is like "2025-11-15" and end.date is "2025-11-16" (exclusive)
+          let startDate, endDate;
+          
+          if (gcalEvent.start.date) {
+            // All-day event: start.date is the date string
+            startDate = new Date(gcalEvent.start.date);
+            startDate.setHours(0, 0, 0, 0); // Set to start of day
+            
+            // End date for all-day events is exclusive (next day)
+            endDate = new Date(gcalEvent.end.date);
+            endDate.setHours(0, 0, 0, 0);
+            // For all-day events, end is the start of the next day
+            // So an event on Nov 15 has end.date = "2025-11-16" which means it ends at Nov 16 00:00
+            // We keep it as is for proper overlap detection
+          } else {
+            // Timed event: use dateTime
+            startDate = new Date(gcalEvent.start.dateTime);
+            endDate = new Date(gcalEvent.end.dateTime);
+          }
+          
           return {
-            Event_Start_Date: new Date(gcalEvent.start.dateTime || gcalEvent.start.date),
-            Event_End_Date: new Date(gcalEvent.end.dateTime || gcalEvent.end.date),
+            Event_Start_Date: startDate,
+            Event_End_Date: endDate,
             Event_Name: gcalEvent.summary || 'Untitled Event',
             Event_Priority: dbEvent?.Event_Priority || 2,
             Event_Flexibility: dbEvent?.Event_Flexibility || 'Busy',
             Event_Type: dbEvent?.Event_Type || 'other',
             Event_Guests: gcalEvent.attendees || [],
             GCal_Event_ID: gcalEvent.id,
-            ID: dbEvent?.ID
+            ID: dbEvent?.ID,
+            isAllDay: !!gcalEvent.start.date // Flag to identify all-day events
           };
         });
       }

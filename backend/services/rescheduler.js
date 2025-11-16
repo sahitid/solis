@@ -90,21 +90,26 @@ function findAvailableTimeSlots(
   // Helper to check if slot conflicts with existing events
   // NOTE: Passive and Flexible events CAN be overlapped, so they're not conflicts
   const hasConflict = (startTime, endTime) => {
+    // Ensure startTime and endTime are Date objects
+    const slotStart = startTime instanceof Date ? startTime : new Date(startTime);
+    const slotEnd = endTime instanceof Date ? endTime : new Date(endTime);
+    
     for (const event of existingEvents) {
       const eventStart = new Date(event.Event_Start_Date);
       const eventEnd = new Date(event.Event_End_Date);
       
-      // Check if times overlap
-      if (startTime < eventEnd && endTime > eventStart) {
-        // Allow overlap with Passive or Flexible events
+      // Check if times overlap (using proper date comparison)
+      if (slotStart < eventEnd && slotEnd > eventStart) {
+        // Allow overlap with Passive or Flexible events (PRD requirement)
         const flexibility = event.Event_Flexibility || 'Busy';
         if (flexibility === 'Passive' || flexibility === 'Flexible') {
-          console.log(`✅ Allowing overlap with ${flexibility} event: ${event.Event_Name}`);
+          console.log(`✅ Allowing overlap with ${flexibility} event: ${event.Event_Name} (${eventStart.toLocaleTimeString()} - ${eventEnd.toLocaleTimeString()})`);
           continue; // This event can be overlapped, not a conflict
         }
         
-        // Rigid and Busy events are real conflicts
-        console.log(`❌ Conflict with ${flexibility} event: ${event.Event_Name}`);
+        // Rigid and Busy events are real conflicts - cannot overlap
+        console.log(`❌ Conflict with ${flexibility} event: ${event.Event_Name} (${eventStart.toLocaleTimeString()} - ${eventEnd.toLocaleTimeString()})`);
+        console.log(`   Slot: ${slotStart.toLocaleTimeString()} - ${slotEnd.toLocaleTimeString()}`);
         return true;
       }
     }
@@ -115,6 +120,19 @@ function findAvailableTimeSlots(
   let currentDate = new Date(searchStart);
   currentDate.setHours(8, 0, 0, 0); // Start at 8 AM
   
+  // IMPORTANT: For same-day slots, don't suggest times in the past
+  const now = new Date();
+  if (sameDayOnly && currentDate < now) {
+    // If we're looking for same-day slots and current time is in the past, start from now
+    currentDate = new Date(now);
+    // Round up to next 30-minute mark
+    const minutes = currentDate.getMinutes();
+    const roundedMinutes = Math.ceil(minutes / 30) * 30;
+    currentDate.setMinutes(roundedMinutes);
+    currentDate.setSeconds(0, 0);
+    console.log(`⏰ Same-day search: Starting from current time ${currentDate.toLocaleTimeString()} (not past)`);
+  }
+  
   console.log(`🔍 Searching for slots from ${currentDate.toLocaleString()} to ${searchEnd.toLocaleString()}`);
   console.log(`📏 Event duration: ${eventDuration} minutes`);
   console.log(`📋 Existing events to check: ${existingEvents.length}`);
@@ -123,6 +141,14 @@ function findAvailableTimeSlots(
   
   while (currentDate < searchEnd && slots.length < maxSlots) {
     const dayOfWeek = currentDate.getDay();
+    
+    // IMPORTANT: Skip times in the past (for same-day searches)
+    // Re-check 'now' each iteration since time is moving forward
+    const currentNow = new Date();
+    if (sameDayOnly && currentDate < currentNow) {
+      currentDate.setMinutes(currentDate.getMinutes() + 30);
+      continue;
+    }
     
     // Check if within work hours
     if (!isWithinWorkHours(currentDate, dayOfWeek)) {
@@ -266,14 +292,22 @@ function findBestDaysForRescheduling(eventDuration, existingEvents, userPreferen
   );
   
   // Only include dates >= original date (no dates before)
-  const originalDateOnly = originalDate ? new Date(originalDate).toISOString().split('T')[0] : null;
+  // Use proper date comparison (not string comparison) to handle timezones correctly
+  const originalDateObj = originalDate ? new Date(originalDate) : null;
+  if (originalDateObj) {
+    originalDateObj.setHours(0, 0, 0, 0); // Normalize to start of day for comparison
+  }
   
   // Group slots by date
   for (const slot of slots) {
-    // IMPORTANT: Skip dates before the original date
-    if (originalDateOnly && slot.date < originalDateOnly) {
-      console.log(`⏭️ Skipping ${slot.date} (before original date ${originalDateOnly})`);
-      continue;
+    // IMPORTANT: Skip dates before the original date (PRD: cannot go in the past)
+    if (originalDateObj) {
+      const slotDate = new Date(slot.date);
+      slotDate.setHours(0, 0, 0, 0);
+      if (slotDate < originalDateObj) {
+        console.log(`⏭️ Skipping ${slot.date} (before original date ${originalDateObj.toISOString().split('T')[0]})`);
+        continue;
+      }
     }
     
     if (!daySlots[slot.date]) {
@@ -291,13 +325,19 @@ function findBestDaysForRescheduling(eventDuration, existingEvents, userPreferen
   const daysArray = Object.values(daySlots);
   daysArray.sort((a, b) => b.totalScore - a.totalScore);
   
-  console.log(`📅 Found ${daysArray.length} days with available slots (all >= ${originalDateOnly || 'today'})`);
+  const originalDateStr = originalDateObj ? originalDateObj.toISOString().split('T')[0] : 'today';
+  console.log(`📅 Found ${daysArray.length} days with available slots (all >= ${originalDateStr})`);
   
-  // Return top 3 days with their best slots
+  // Return top 3 days with ALL their available slots (not just top 3)
+  // Sort slots within each day by score (best first)
+  daysArray.forEach(day => {
+    day.availableSlots.sort((a, b) => b.score - a.score);
+  });
+  
   return daysArray.slice(0, 3).map(day => ({
     date: day.date,
     dayOfWeek: new Date(day.date).toLocaleDateString('en-US', { weekday: 'long' }),
-    availableSlots: day.availableSlots.slice(0, 3), // Top 3 slots for this day
+    availableSlots: day.availableSlots, // ALL slots for this day (sorted by score)
     reason: `${day.availableSlots.length} available time slots`
   }));
 }

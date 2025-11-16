@@ -12,9 +12,65 @@ function doEventsOverlap(event1Start, event1End, event2Start, event2End) {
   const start2 = new Date(event2Start);
   const end2 = new Date(event2End);
 
-  // Events overlap if one starts before the other ends
+  // Check if either event is an all-day event
+  // All-day events have start and end on different days, or end is start of next day
+  const isAllDay1 = isAllDayEvent(start1, end1);
+  const isAllDay2 = isAllDayEvent(start2, end2);
+  
+  // If either is all-day, check if they're on the same day
+  if (isAllDay1 || isAllDay2) {
+    const day1 = start1.toISOString().split('T')[0];
+    const day2 = start2.toISOString().split('T')[0];
+    
+    // All-day events overlap with any event on the same day
+    if (isAllDay1 && isAllDay2) {
+      return day1 === day2;
+    }
+    
+    // All-day event overlaps with timed event if timed event is on the same day
+    if (isAllDay1) {
+      const timedEventDay = start2.toISOString().split('T')[0];
+      return day1 === timedEventDay;
+    }
+    
+    if (isAllDay2) {
+      const timedEventDay = start1.toISOString().split('T')[0];
+      return day2 === timedEventDay;
+    }
+  }
+
+  // Regular timed events overlap if one starts before the other ends
   // and the other starts before the first one ends
   return start1 < end2 && start2 < end1;
+}
+
+/**
+ * Check if an event is an all-day event
+ * All-day events typically:
+ * - Have start and end dates (not dateTime) in Google Calendar
+ * - Span exactly one day (end is start of next day)
+ * - Or have duration of ~24 hours
+ */
+function isAllDayEvent(start, end) {
+  const startDate = new Date(start);
+  const endDate = new Date(end);
+  
+  // Check if it spans exactly one calendar day
+  const startDay = startDate.toISOString().split('T')[0];
+  const endDay = endDate.toISOString().split('T')[0];
+  
+  // All-day events: end date is the day after start date
+  // Or duration is close to 24 hours (23-25 hours to account for timezone issues)
+  const durationHours = (endDate - startDate) / (1000 * 60 * 60);
+  const isFullDay = durationHours >= 23 && durationHours <= 25;
+  const isNextDay = endDay > startDay;
+  
+  // Also check if start time is midnight (00:00:00) which is common for all-day events
+  const isMidnightStart = startDate.getHours() === 0 && 
+                          startDate.getMinutes() === 0 && 
+                          startDate.getSeconds() === 0;
+  
+  return (isNextDay && isFullDay) || (isMidnightStart && isFullDay);
 }
 
 /**
