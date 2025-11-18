@@ -568,6 +568,260 @@ router.post('/analyze-conflict', async (req, res) => {
   }
 });
 
+// @route   POST /api/reschedule-decision/analyze-multiple-conflicts
+// @desc    Analyze multiple conflicts and suggest best action for all
+// @access  Private
+router.post('/analyze-multiple-conflicts', async (req, res) => {
+  const { email, newEventData, conflictingEventIds } = req.body;
+
+  if (!email || !newEventData || !conflictingEventIds || !Array.isArray(conflictingEventIds)) {
+    return res.status(400).json({ error: 'Missing required fields: email, newEventData, and conflictingEventIds (array)' });
+  }
+
+  try {
+    const user = await User.findOne({ Email: email });
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Fetch all conflicting events
+    const conflictingEvents = await Event.find({ 
+      ID: { $in: conflictingEventIds }, 
+      User_Email: email 
+    });
+    
+    if (conflictingEvents.length !== conflictingEventIds.length) {
+      console.warn(`⚠️ Found ${conflictingEvents.length} events but expected ${conflictingEventIds.length}`);
+    }
+
+    if (conflictingEvents.length === 0) {
+      return res.status(404).json({ error: 'No conflicting events found' });
+    }
+
+    console.log(`🔍 Analyzing ${conflictingEvents.length} conflicts for event: ${newEventData.title || newEventData.Event_Name}`);
+
+    // Analyze each conflict to determine which events should be moved
+    const eventsToMove = [];
+    const eventsToKeep = [];
+    let overallReason = '';
+    let overallConfidence = 'medium';
+    const reasons = [];
+
+    // Check flexibility constraints first
+    const newEventFlexibility = newEventData.flexibility || newEventData.Event_Flexibility || 'Busy';
+    const newEventIsImmutable = newEventFlexibility === 'Rigid' || newEventFlexibility === 'Passive';
+
+    if (newEventIsImmutable) {
+      // New event cannot be moved - must move all conflicting events
+      console.log(`🔒 New event is ${newEventFlexibility} - cannot be moved. Moving all conflicting events.`);
+      conflictingEvents.forEach(conflictingEvent => {
+        const conflictingEventFlexibility = conflictingEvent.Event_Flexibility || 'Busy';
+        const conflictingEventIsImmutable = conflictingEventFlexibility === 'Rigid' || conflictingEventFlexibility === 'Passive';
+        
+        if (conflictingEventIsImmutable) {
+          // Both are immutable - this is a hard conflict
+          return res.status(409).json({
+            success: false,
+            error: `Cannot resolve conflict: Both new event and "${conflictingEvent.Event_Name}" are Rigid or Passive and cannot be moved`,
+            hasConflicts: true
+          });
+        }
+        
+        eventsToMove.push({
+          id: conflictingEvent.ID,
+          name: conflictingEvent.Event_Name,
+          event: conflictingEvent,
+          hasAttendees: (conflictingEvent.Event_Guests || []).length > 0
+        });
+      });
+      
+      overallReason = `Your new event "${newEventData.title || newEventData.Event_Name}" is marked as ${newEventFlexibility} and cannot be moved. We'll reschedule ${eventsToMove.length} conflicting event${eventsToMove.length > 1 ? 's' : ''} to resolve all conflicts.`;
+      overallConfidence = 'high';
+    } else {
+      // New event can be moved - analyze each conflict to decide
+      for (const conflictingEvent of conflictingEvents) {
+        const conflictingEventFlexibility = conflictingEvent.Event_Flexibility || 'Busy';
+        const conflictingEventIsImmutable = conflictingEventFlexibility === 'Rigid' || conflictingEventFlexibility === 'Passive';
+        
+        if (conflictingEventIsImmutable) {
+          // Conflicting event cannot be moved - must move new event
+          eventsToMove.push({
+            id: 'new',
+            name: newEventData.title || newEventData.Event_Name,
+            event: null, // new event
+            hasAttendees: (newEventData.attendees || newEventData.Event_Guests || []).length > 0
+          });
+          reasons.push(`"${conflictingEvent.Event_Name}" is ${conflictingEventFlexibility} and cannot be moved`);
+        } else {
+          // Both can be moved - use AI/heuristic to decide
+          try {
+            const aiComparison = await compareEventPriorityWithAI(newEventData, conflictingEvent);
+            const normalizedHigherPriority = typeof aiComparison.higherPriorityEvent === 'string'
+              ? (aiComparison.higherPriorityEvent === 'new' ? 1 : 2)
+              : aiComparison.higherPriorityEvent;
+            
+            if (normalizedHigherPriority === 1) {
+              // New event is higher priority - move conflicting event
+              eventsToMove.push({
+                id: conflictingEvent.ID,
+                name: conflictingEvent.Event_Name,
+                event: conflictingEvent,
+                hasAttendees: (conflictingEvent.Event_Guests || []).length > 0
+              });
+              reasons.push(`"${conflictingEvent.Event_Name}" is lower priority`);
+            } else {
+              // Conflicting event is higher priority - move new event
+              eventsToMove.push({
+                id: 'new',
+                name: newEventData.title || newEventData.Event_Name,
+                event: null,
+                hasAttendees: (newEventData.attendees || newEventData.Event_Guests || []).length > 0
+              });
+              reasons.push(`"${conflictingEvent.Event_Name}" is higher priority`);
+            }
+          } catch (aiError) {
+            // Fallback to heuristic
+            const importance = compareEventImportance(newEventData, conflictingEvent);
+            if (importance === 1) {
+              // New event is more important - move conflicting event
+              eventsToMove.push({
+                id: conflictingEvent.ID,
+                name: conflictingEvent.Event_Name,
+                event: conflictingEvent,
+                hasAttendees: (conflictingEvent.Event_Guests || []).length > 0
+              });
+            } else {
+              // Conflicting event is more important - move new event
+              eventsToMove.push({
+                id: 'new',
+                name: newEventData.title || newEventData.Event_Name,
+                event: null,
+                hasAttendees: (newEventData.attendees || newEventData.Event_Guests || []).length > 0
+              });
+            }
+          }
+        }
+      }
+      
+      // If we're moving the new event, we only need one entry
+      const movingNewEvent = eventsToMove.some(e => e.id === 'new');
+      if (movingNewEvent) {
+        eventsToMove.length = 0;
+        eventsToMove.push({
+          id: 'new',
+          name: newEventData.title || newEventData.Event_Name,
+          event: null,
+          hasAttendees: (newEventData.attendees || newEventData.Event_Guests || []).length > 0
+        });
+        overallReason = `Your new event conflicts with ${conflictingEvents.length} event${conflictingEvents.length > 1 ? 's' : ''}. We'll move your new event to resolve all conflicts.`;
+      } else {
+        overallReason = `Your new event conflicts with ${conflictingEvents.length} event${conflictingEvents.length > 1 ? 's' : ''}. We'll reschedule ${eventsToMove.length} conflicting event${eventsToMove.length > 1 ? 's' : ''}: ${eventsToMove.map(e => e.name).join(', ')}.`;
+      }
+    }
+
+    // Find best reschedule slot (for the first event to move, or new event if moving new)
+    const eventToReschedule = eventsToMove[0];
+    const eventForSlotFinding = eventToReschedule.id === 'new' 
+      ? newEventData 
+      : eventToReschedule.event;
+    
+    // Get all events for slot finding
+    const eventStartDate = new Date(newEventData.startDateTime || newEventData.Event_Start_Date);
+    const searchStart = new Date(eventStartDate.getTime() - 24 * 60 * 60 * 1000);
+    const searchEnd = new Date(eventStartDate.getTime() + 24 * 60 * 60 * 1000);
+    
+    const calendarResult = await getCalendarEvents(
+      user.OAuth_Token,
+      searchStart.toISOString(),
+      searchEnd.toISOString()
+    );
+    
+    let allEvents = [];
+    if (calendarResult.success) {
+      const gcalEventIds = calendarResult.events.map(e => e.id).filter(id => id);
+      const dbEvents = await Event.find({
+        User_Email: email,
+        GCal_Event_ID: { $in: gcalEventIds }
+      });
+      const dbEventMap = new Map();
+      dbEvents.forEach(e => {
+        if (e.GCal_Event_ID) dbEventMap.set(e.GCal_Event_ID, e);
+      });
+      
+      allEvents = calendarResult.events
+        .filter(gcalEvent => {
+          // Exclude the events we're moving
+          const dbEvent = dbEventMap.get(gcalEvent.id);
+          return !eventsToMove.some(e => e.id === dbEvent?.ID);
+        })
+        .map(gcalEvent => {
+          const dbEvent = dbEventMap.get(gcalEvent.id);
+          let startDate, endDate;
+          if (gcalEvent.start.date) {
+            startDate = new Date(gcalEvent.start.date);
+            startDate.setHours(0, 0, 0, 0);
+            endDate = new Date(gcalEvent.end.date);
+            endDate.setHours(0, 0, 0, 0);
+          } else {
+            startDate = new Date(gcalEvent.start.dateTime);
+            endDate = new Date(gcalEvent.end.dateTime);
+          }
+          return {
+            Event_Start_Date: startDate,
+            Event_End_Date: endDate,
+            Event_Name: gcalEvent.summary || 'Untitled Event',
+            Event_Priority: dbEvent?.Event_Priority || 2,
+            Event_Flexibility: dbEvent?.Event_Flexibility || 'Busy',
+            Event_Type: dbEvent?.Event_Type || 'other',
+            Event_Guests: gcalEvent.attendees || [],
+            GCal_Event_ID: gcalEvent.id,
+            ID: dbEvent?.ID,
+            isAllDay: !!gcalEvent.start.date
+          };
+        });
+    }
+
+    const duration = calculateEventDuration(
+      eventForSlotFinding.Event_Start_Date || eventForSlotFinding.startDateTime,
+      eventForSlotFinding.Event_End_Date || eventForSlotFinding.endDateTime
+    );
+
+    // Find best same-day slot
+    const sameDayBestSlot = findBestRescheduleSlot(
+      duration,
+      eventForSlotFinding.Event_Start_Date || eventForSlotFinding.startDateTime,
+      allEvents,
+      { Work_Hours: {}, Bedtime: {}, No_Meeting_Zones: [], Preferred_Meeting_Windows: [] },
+      { sameDayOnly: true, maxSlots: 1 }
+    );
+
+    res.json({
+      success: true,
+      analysis: {
+        aiPriorityComparison: {
+          reason: overallReason,
+          confidenceLevel: overallConfidence
+        },
+        recommendation: {
+          action: eventsToMove.some(e => e.id === 'new') ? 'move_new_event' : 'move_existing_events',
+          eventToMove: eventsToMove[0] || { id: 'new', name: newEventData.title },
+          eventToKeep: { id: 'new', name: newEventData.title }
+        },
+        eventsToMove: eventsToMove,
+        sameDayBestSlot: sameDayBestSlot
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Analyze multiple conflicts error:', error);
+    res.status(500).json({ 
+      success: false,
+      error: 'Failed to analyze conflicts', 
+      details: error.message
+    });
+  }
+});
+
 // @route   POST /api/reschedule-decision/get-broad-options
 // @desc    Get broad decision tree options (cancel, different day, same day)
 // @access  Private
@@ -840,6 +1094,20 @@ router.post('/move-manual', async (req, res) => {
     // Validate the proposed new time does not conflict with Busy/Rigid events (allow Passive/Flexible)
     const proposedStart = new Date(newTimeSlot.startDateTime);
     const proposedEnd = new Date(newTimeSlot.endDateTime);
+
+    // HARDCODED RESTRICTION: No rescheduling allowed before 6 AM or after 10 PM
+    const MIN_HOUR = 6;  // 6 AM
+    const MAX_HOUR = 22; // 10 PM (22:00)
+    const startHour = proposedStart.getHours();
+    const endHour = proposedEnd.getHours();
+    
+    if (startHour < MIN_HOUR || startHour >= MAX_HOUR || endHour < MIN_HOUR || endHour >= MAX_HOUR) {
+      return res.status(400).json({
+        success: false,
+        error: 'Rescheduling is not allowed before 6 AM or after 10 PM',
+        details: `Selected time: ${startHour.toString().padStart(2, '0')}:${proposedStart.getMinutes().toString().padStart(2, '0')}`
+      });
+    }
 
     // Fetch all events for the day of the proposed time (Google Calendar, enriched with DB)
     const dayStart = new Date(proposedStart);

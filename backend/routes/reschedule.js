@@ -492,6 +492,22 @@ router.post('/execute-solo', async (req, res) => {
       return res.status(404).json({ error: 'Event not found' });
     }
 
+    // HARDCODED RESTRICTION: No rescheduling allowed before 6 AM or after 10 PM
+    const proposedStart = new Date(newTimeSlot.startDateTime);
+    const proposedEnd = new Date(newTimeSlot.endDateTime);
+    const MIN_HOUR = 6;  // 6 AM
+    const MAX_HOUR = 22; // 10 PM (22:00)
+    const startHour = proposedStart.getHours();
+    const endHour = proposedEnd.getHours();
+    
+    if (startHour < MIN_HOUR || startHour >= MAX_HOUR || endHour < MIN_HOUR || endHour >= MAX_HOUR) {
+      return res.status(400).json({
+        success: false,
+        error: 'Rescheduling is not allowed before 6 AM or after 10 PM',
+        details: `Selected time: ${startHour.toString().padStart(2, '0')}:${proposedStart.getMinutes().toString().padStart(2, '0')}`
+      });
+    }
+
     // Validate the new time slot
     const otherEvents = await Event.find({
       User_Email: email,
