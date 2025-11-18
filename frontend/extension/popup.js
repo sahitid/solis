@@ -9,9 +9,13 @@ let currentEventData = null;
 
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
-  checkAuth();
+  // Show login screen immediately for faster popup opening
+  showLoginScreen();
   setupEventListeners();
   setDefaultDates();
+  
+  // Check auth in background (non-blocking)
+  checkAuth();
 });
 
 // Check if user is authenticated
@@ -26,20 +30,31 @@ async function checkAuth() {
       updateUserInfo();
     } else {
       // Also check if there's user data waiting from OAuth (in case message didn't get through)
-      checkForPendingAuth();
-      showLoginScreen();
+      // Run in background, don't block UI
+      checkForPendingAuth().catch(err => {
+        console.error('Error checking pending auth:', err);
+      });
     }
   } catch (error) {
     console.error('Auth check error:', error);
-    showLoginScreen();
+    // Keep login screen visible on error
   }
 }
 
 // Check for pending auth from OAuth success page
 async function checkForPendingAuth() {
   try {
-    // Query the success page tab if it exists
-    const tabs = await chrome.tabs.query({ url: 'http://localhost:5000/api/auth/success*' });
+    // Query the success page tab if it exists (with timeout to avoid blocking)
+    let tabs = [];
+    try {
+      tabs = await Promise.race([
+        chrome.tabs.query({ url: 'http://localhost:5000/api/auth/success*' }),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 1000))
+      ]);
+    } catch (err) {
+      // Timeout or error - just continue with empty tabs array
+      return;
+    }
     
     if (tabs.length > 0) {
       // Execute script to get user data from localStorage
@@ -60,11 +75,12 @@ async function checkForPendingAuth() {
         updateUserInfo();
         showMessage('✅ Successfully signed in!', 'success');
         
-        // Close the success tab
-        chrome.tabs.remove(tabs[0].id);
+        // Close the success tab (don't await to avoid blocking)
+        chrome.tabs.remove(tabs[0].id).catch(() => {});
       }
     }
   } catch (error) {
+    // Silently fail - this is a background check, don't disrupt UX
     console.error('Error checking for pending auth:', error);
   }
 }
@@ -274,7 +290,13 @@ async function handleEventSubmit(e) {
 // Set default dates
 function setDefaultDates() {
   const today = new Date();
-  const formatDate = (date) => date.toISOString().split('T')[0];
+  // Format date as YYYY-MM-DD using local time (not UTC) to avoid timezone issues
+  const formatDate = (date) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
   
   document.getElementById('startDate').value = formatDate(today);
   document.getElementById('endDate').value = formatDate(today);
@@ -519,64 +541,19 @@ async function handleAcceptSlot() {
       }
       
     } else {
-      // CASE 2: New event is HIGHER priority - move EXISTING event, schedule new event at original time
-      console.log('🔥 CASE 2: Moving EXISTING event, keeping new event at original time');
+      // CASE 2: New event is HIGHER priority - move old event to new time, add new event at original time
+      console.log('🔥 CASE 2: Moving old busy event to new time, adding new rigid event at original time');
       console.log('📋 Conflicting event ID:', conflictData.conflicts[0].conflictingEvent.id);
       console.log('📋 Event to move:', recommendation.eventToMove.name);
-      console.log('📋 Event to keep:', recommendation.eventToKeep.name);
-      console.log('📋 New time slot:', slot.startDateTime, 'to', slot.endDateTime);
+      console.log('📋 New event to add:', recommendation.eventToKeep.name);
+      console.log('📋 Proposed reschedule slot:', slot.startDateTime, 'to', slot.endDateTime);
       
       const conflictingEventId = conflictData.conflicts[0].conflictingEvent.id;
-
-      // If the existing event has attendees, DO NOT move the event now.
-      // Instead, send a reschedule proposal email to attendees and DO NOT change times.
+      const conflictingEvent = conflictData.conflicts[0].conflictingEvent;
       const eventToMoveHasAttendees = !!recommendation.eventToMove?.hasAttendees;
-      if (eventToMoveHasAttendees) {
-        console.log('📧 Existing event has attendees. Sending reschedule proposal instead of moving it.');
-        const proposeResponse = await fetch(`${API_BASE}/reschedule/propose-multi-attendee`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            email: currentUser.Email,
-            eventId: conflictingEventId,
-            newTimeSlot: {
-              startDateTime: slot.startDateTime,
-              endDateTime: slot.endDateTime
-            },
-            reason: 'Conflict with new event'
-          })
-        });
-        const proposeData = await proposeResponse.json();
-        console.log('📊 Propose response:', proposeResponse.status, proposeData);
-        if (!proposeResponse.ok || !proposeData.success) {
-          throw new Error(proposeData.error || 'Failed to send proposal email');
-        }
-        closeConflictModal();
-        showMessage(`✅ Proposal email sent to attendees for "${recommendation.eventToMove.name}".`, 'success');
-        document.getElementById('eventForm').reset();
-        setDefaultDates();
-        return;
-      }
 
-      // Otherwise, proceed with immediate move (no attendees on existing event)
-      console.log('📦 Moving existing event (no attendees) and creating new event at original time...');
-      const moveResponse = await fetch(`${API_BASE}/reschedule-decision/move-manual`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: currentUser.Email,
-          eventId: conflictingEventId,
-          newTimeSlot: {
-            startDateTime: slot.startDateTime,
-            endDateTime: slot.endDateTime
-          },
-          userApproved: true
-        })
-      });
-      const moveData = await moveResponse.json();
-      if (!moveResponse.ok || !moveData.success) {
-        throw new Error(moveData.error || 'Failed to move existing event');
-      }
+      // Step 1: Create the new rigid event at the original requested time
+      console.log('📝 Step 1: Creating new rigid event at original time...');
       const createResponse = await fetch(`${API_BASE}/events/create`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -587,16 +564,69 @@ async function handleAcceptSlot() {
         })
       });
       const createData = await createResponse.json();
-      if (createResponse.ok && createData.success) {
-        const newEventTitle = currentEventData.title;
-        const successMsg = `✅ "${recommendation.eventToMove.name}" moved to ${slot.formatted.startTime}, your "${newEventTitle}" scheduled at original time!`;
-        closeConflictModal();
-        showMessage(successMsg, 'success');
-        document.getElementById('eventForm').reset();
-        setDefaultDates();
-      } else {
-        throw new Error(createData.error || 'Failed to schedule new event');
+      if (!createResponse.ok || !createData.success) {
+        throw new Error(createData.error || 'Failed to create new event');
       }
+      console.log('✅ New event created successfully');
+
+      // Step 2: Move the old busy event to the new suggested time slot
+      // If it has attendees, the title will be updated to "TENTATIVE: [original title]"
+      console.log('📦 Step 2: Moving old busy event to new time slot...');
+      const moveResponse = await fetch(`${API_BASE}/reschedule-decision/move-manual`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: currentUser.Email,
+          eventId: conflictingEventId,
+          newTimeSlot: {
+            startDateTime: slot.startDateTime,
+            endDateTime: slot.endDateTime
+          },
+          userApproved: true,
+          updateTitleToTentative: eventToMoveHasAttendees // Flag to update title if has attendees
+        })
+      });
+      const moveData = await moveResponse.json();
+      if (!moveResponse.ok || !moveData.success) {
+        throw new Error(moveData.error || 'Failed to move old event');
+      }
+      console.log('✅ Old event moved successfully');
+
+      // Step 3: Send proposal email with suggested new time slot (if event had attendees)
+      if (eventToMoveHasAttendees) {
+        console.log('📧 Step 3: Sending reschedule proposal email to attendees...');
+        const proposeResponse = await fetch(`${API_BASE}/reschedule/propose-multi-attendee`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: currentUser.Email,
+            eventId: conflictingEventId,
+            newTimeSlot: {
+              startDateTime: slot.startDateTime,
+              endDateTime: slot.endDateTime
+            },
+            reason: 'Conflict with new event - proposing new time'
+          })
+        });
+        const proposeData = await proposeResponse.json();
+        console.log('📊 Propose response:', proposeResponse.status, proposeData);
+        if (!proposeResponse.ok || !proposeData.success) {
+          // Don't fail the whole operation if email fails, just log it
+          console.warn('⚠️ Failed to send proposal email:', proposeData.error);
+        } else {
+          console.log('✅ Proposal email sent successfully');
+        }
+      }
+
+      const newEventTitle = currentEventData.title;
+      const successMsg = eventToMoveHasAttendees
+        ? `✅ "${newEventTitle}" added to calendar. Old event moved to ${slot.formatted.startTime} and reschedule proposal sent to attendees.`
+        : `✅ "${newEventTitle}" added to calendar. Old event moved to ${slot.formatted.startTime}.`;
+      
+      closeConflictModal();
+      showMessage(successMsg, 'success');
+      document.getElementById('eventForm').reset();
+      setDefaultDates();
     }
     
   } catch (error) {
@@ -775,35 +805,150 @@ async function scheduleAtTime(slot) {
   
   try {
     console.log('Scheduling at slot:', slot);
+    console.log('Conflict data:', conflictData);
     
-    const response = await fetch(`${API_BASE}/events/create`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        email: currentUser.Email,
-        eventData: {
-          ...currentEventData,
-          startDateTime: slot.startDateTime,
-          endDateTime: slot.endDateTime
-        },
-        skipConflictCheck: true // Skip check since this is a suggested available slot
-      })
-    });
+    // Check which event should be moved based on AI recommendation
+    const recommendation = conflictData?.analysis?.recommendation;
+    const movingNewEvent = recommendation?.action === 'move_new_event';
+    const conflictingEventId = conflictData?.conflicts?.[0]?.conflictingEvent?.id;
     
-    const data = await response.json();
-    
-    console.log('Response:', response.status, data);
-    
-    if (response.ok && data.success) {
+    if (movingNewEvent) {
+      // CASE 1: New event is LOWER priority - move it to the selected slot
+      console.log('➡️ Moving NEW event to selected slot');
+      
+      // Ensure dates are properly formatted (handle both Date objects and ISO strings)
+      const startDateTime = slot.startDateTime instanceof Date 
+        ? slot.startDateTime.toISOString() 
+        : (typeof slot.startDateTime === 'string' ? slot.startDateTime : new Date(slot.startDateTime).toISOString());
+      const endDateTime = slot.endDateTime instanceof Date 
+        ? slot.endDateTime.toISOString() 
+        : (typeof slot.endDateTime === 'string' ? slot.endDateTime : new Date(slot.endDateTime).toISOString());
+      
+      console.log('📅 Using slot dates:', { startDateTime, endDateTime, slotDate: slot.date });
+      
+      const response = await fetch(`${API_BASE}/events/create`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: currentUser.Email,
+          eventData: {
+            ...currentEventData,
+            startDateTime: startDateTime,
+            endDateTime: endDateTime
+          },
+          skipConflictCheck: true // Skip check since this is a suggested available slot
+        })
+      });
+      
+      const data = await response.json();
+      
+      console.log('Response:', response.status, data);
+      
+      if (response.ok && data.success) {
+        closeConflictModal();
+        showMessage(`✅ Event scheduled for ${slot.startTime}!`, 'success');
+        document.getElementById('eventForm').reset();
+        setDefaultDates();
+      } else if (response.status === 409) {
+        hideModalLoading();
+        showMessage('⚠️ This time also has a conflict. Try another option.', 'warning');
+      } else {
+        throw new Error(data.error || 'Failed to schedule event');
+      }
+    } else {
+      // CASE 2: Old event is LOWER priority - move it to selected slot, create new event at original time
+      console.log('➡️ Moving OLD event to selected slot, creating new event at original time');
+      
+      if (!conflictingEventId) {
+        throw new Error('Conflicting event ID not found');
+      }
+      
+      // Step 1: Create the new rigid event at the original requested time
+      console.log('📝 Step 1: Creating new rigid event at original time...');
+      const createResponse = await fetch(`${API_BASE}/events/create`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: currentUser.Email,
+          eventData: currentEventData,
+          skipConflictCheck: true
+        })
+      });
+      const createData = await createResponse.json();
+      if (!createResponse.ok || !createData.success) {
+        throw new Error(createData.error || 'Failed to create new event');
+      }
+      console.log('✅ New event created successfully');
+      
+      // Step 2: Move the old busy event to the selected time slot
+      const eventToMoveHasAttendees = !!recommendation?.eventToMove?.hasAttendees;
+      console.log('📦 Step 2: Moving old busy event to selected time slot...');
+      
+      // Ensure dates are properly formatted (handle both Date objects and ISO strings)
+      const startDateTime = slot.startDateTime instanceof Date 
+        ? slot.startDateTime.toISOString() 
+        : (typeof slot.startDateTime === 'string' ? slot.startDateTime : new Date(slot.startDateTime).toISOString());
+      const endDateTime = slot.endDateTime instanceof Date 
+        ? slot.endDateTime.toISOString() 
+        : (typeof slot.endDateTime === 'string' ? slot.endDateTime : new Date(slot.endDateTime).toISOString());
+      
+      console.log('📅 Using slot dates for move:', { startDateTime, endDateTime, slotDate: slot.date });
+      
+      const moveResponse = await fetch(`${API_BASE}/reschedule-decision/move-manual`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: currentUser.Email,
+          eventId: conflictingEventId,
+          newTimeSlot: {
+            startDateTime: startDateTime,
+            endDateTime: endDateTime
+          },
+          userApproved: true,
+          updateTitleToTentative: eventToMoveHasAttendees // Flag to update title if has attendees
+        })
+      });
+      const moveData = await moveResponse.json();
+      if (!moveResponse.ok || !moveData.success) {
+        throw new Error(moveData.error || 'Failed to move old event');
+      }
+      console.log('✅ Old event moved successfully');
+      
+      // Step 3: Send proposal email if needed
+      if (eventToMoveHasAttendees) {
+        console.log('📧 Step 3: Sending reschedule proposal email to attendees...');
+        
+        // Use the same formatted dates from Step 2
+        const proposeResponse = await fetch(`${API_BASE}/reschedule/propose-multi-attendee`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: currentUser.Email,
+            eventId: conflictingEventId,
+            newTimeSlot: {
+              startDateTime: startDateTime, // Use the formatted dates from Step 2
+              endDateTime: endDateTime
+            },
+            reason: 'Conflict with new event - proposing new time'
+          })
+        });
+        const proposeData = await proposeResponse.json();
+        if (!proposeResponse.ok || !proposeData.success) {
+          console.warn('⚠️ Failed to send proposal email:', proposeData.error);
+        } else {
+          console.log('✅ Proposal email sent successfully');
+        }
+      }
+      
+      const newEventTitle = currentEventData.title;
+      const successMsg = eventToMoveHasAttendees
+        ? `✅ "${newEventTitle}" added to calendar. Old event moved to ${slot.startTime} and reschedule proposal sent to attendees.`
+        : `✅ "${newEventTitle}" added to calendar. Old event moved to ${slot.startTime}.`;
+      
       closeConflictModal();
-      showMessage(`✅ Event scheduled for ${slot.startTime}!`, 'success');
+      showMessage(successMsg, 'success');
       document.getElementById('eventForm').reset();
       setDefaultDates();
-    } else if (response.status === 409) {
-      hideModalLoading();
-      showMessage('⚠️ This time also has a conflict. Try another option.', 'warning');
-    } else {
-      throw new Error(data.error || 'Failed to schedule event');
     }
     
   } catch (error) {

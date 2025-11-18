@@ -141,7 +141,7 @@ router.get('/success', (req, res) => {
             // Also save to localStorage as backup
             localStorage.setItem('solis_user', JSON.stringify(userData));
             
-            statusDiv.innerHTML = '<p>Sign in successful!</p><p style="font-size: 14px;">Click the Solis extension icon to continue.</p><p style="font-size: 12px; margin-top: 16px; color: #2F2F2F;">You can close this tab now.</p><button class="close-btn" onclick="window.close()">Close Tab</button>';
+            statusDiv.innerHTML = '<p>Sign in successful!</p><p style="font-size: 14px;">Click the Solis extension icon to continue.</p><p style="font-size: 12px; margin-top: 16px; color: #2F2F2F;">You can close this tab now.';
             
             // Auto-close after 5 seconds
             setTimeout(() => {

@@ -17,6 +17,17 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       .catch(error => sendResponse({ success: false, error: error.message }));
     return true;
   }
+  
+  if (request.action === 'closeTab') {
+    // Close the tab that sent the message (the success page)
+    if (sender.tab && sender.tab.id) {
+      chrome.tabs.remove(sender.tab.id);
+      sendResponse({ success: true });
+    } else {
+      sendResponse({ success: false, error: 'No tab ID available' });
+    }
+    return true;
+  }
 });
 
 // Get user's primary calendar ID
@@ -52,6 +63,20 @@ async function createUserInDatabase(userData) {
   
   return await response.json();
 }
+
+// Inject helper script into success page to enable tab closing
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  if (changeInfo.status === 'complete' && tab.url && tab.url.includes('/api/auth/success')) {
+    // Inject the helper script
+    chrome.scripting.executeScript({
+      target: { tabId: tabId },
+      files: ['success-page-helper.js']
+    }).catch(err => {
+      // Ignore errors (e.g., if script already injected)
+      console.log('Could not inject helper script:', err);
+    });
+  }
+});
 
 // Keep service worker alive
 chrome.runtime.onInstalled.addListener(() => {

@@ -113,16 +113,59 @@ router.post('/analyze-conflict', async (req, res) => {
       }
     }
 
-    // IMPORTANT: Always move the LOWER priority event
-    // If new event is higher priority (1), move the existing event
-    // If existing event is higher priority (2), move the new event
-    const shouldMoveNewEvent = finalHigherPriority === 2; // Existing event is higher priority
+    // CRITICAL: Check flexibility constraints - Rigid and Passive events CANNOT be moved
+    const newEventFlexibility = newEventData.flexibility || newEventData.Event_Flexibility || 'Busy';
+    const conflictingEventFlexibility = conflictingEvent.Event_Flexibility || 'Busy';
+    
+    const newEventIsImmutable = newEventFlexibility === 'Rigid' || newEventFlexibility === 'Passive';
+    const conflictingEventIsImmutable = conflictingEventFlexibility === 'Rigid' || conflictingEventFlexibility === 'Passive';
+    
+    let shouldMoveNewEvent;
+    let flexibilityReason = null; // Will contain explanation if flexibility is the deciding factor
+    
+    if (newEventIsImmutable && conflictingEventIsImmutable) {
+      // Both events are Rigid/Passive - this is a hard conflict
+      // In this case, we cannot resolve it automatically - the new event cannot be created
+      return res.status(409).json({
+        success: false,
+        error: 'Cannot resolve conflict: Both events are Rigid or Passive and cannot be moved',
+        hasConflicts: true,
+        conflicts: [{
+          conflictingEvent: {
+            id: conflictingEvent.ID,
+            name: conflictingEvent.Event_Name,
+            start: conflictingEvent.Event_Start_Date,
+            end: conflictingEvent.Event_End_Date,
+            flexibility: conflictingEventFlexibility
+          }
+        }]
+      });
+    } else if (newEventIsImmutable) {
+      // New event is Rigid/Passive - it cannot be moved, so move the conflicting event
+      console.log(`🔒 New event is ${newEventFlexibility} - cannot be moved. Moving conflicting event instead.`);
+      shouldMoveNewEvent = false; // Move the conflicting event
+      flexibilityReason = `The new event "${newEventData.title || newEventData.Event_Name}" is marked as ${newEventFlexibility}, which means it cannot be moved or rescheduled. Therefore, we'll move "${conflictingEvent.Event_Name}" (${conflictingEventFlexibility}) to resolve the conflict.`;
+    } else if (conflictingEventIsImmutable) {
+      // Conflicting event is Rigid/Passive - it cannot be moved, so move the new event
+      console.log(`🔒 Conflicting event is ${conflictingEventFlexibility} - cannot be moved. Moving new event instead.`);
+      shouldMoveNewEvent = true; // Move the new event
+      flexibilityReason = `The existing event "${conflictingEvent.Event_Name}" is marked as ${conflictingEventFlexibility}, which means it cannot be moved or rescheduled. Therefore, we'll move your new event "${newEventData.title || newEventData.Event_Name}" (${newEventFlexibility}) to resolve the conflict.`;
+    } else {
+      // Neither event is Rigid/Passive - use AI priority to decide
+      // IMPORTANT: Always move the LOWER priority event
+      // If new event is higher priority (1), move the existing event
+      // If existing event is higher priority (2), move the new event
+      shouldMoveNewEvent = finalHigherPriority === 2; // Existing event is higher priority
+      console.log(`🎯 AI Decision: ${shouldMoveNewEvent ? 'Move NEW event' : 'Move EXISTING event'} (based on priority)`);
+      // Use the original AI reason since flexibility wasn't the deciding factor
+      flexibilityReason = aiComparison.reason;
+    }
+    
     const eventToMove = shouldMoveNewEvent ? newEventData : conflictingEvent;
     const eventToKeep = shouldMoveNewEvent ? conflictingEvent : newEventData;
 
-    console.log(`🎯 AI Decision: ${shouldMoveNewEvent ? 'Move NEW event' : 'Move EXISTING event'}`);
-    console.log(`📌 Event to move: ${eventToMove.Event_Name || eventToMove.title}`);
-    console.log(`📌 Event to keep: ${eventToKeep.Event_Name || eventToKeep.title}`);
+    console.log(`📌 Event to move: ${eventToMove.Event_Name || eventToMove.title} (${newEventIsImmutable ? newEventFlexibility : conflictingEventIsImmutable ? conflictingEventFlexibility : 'flexible'})`);
+    console.log(`📌 Event to keep: ${eventToKeep.Event_Name || eventToKeep.title} (${shouldMoveNewEvent ? conflictingEventFlexibility : newEventFlexibility})`);
 
     // Validate event data
     if (!eventToMove) {
@@ -452,8 +495,9 @@ router.post('/analyze-conflict', async (req, res) => {
       analysis: {
         aiPriorityComparison: {
           higherPriorityEvent: shouldMoveNewEvent ? 'existing' : 'new',
-          reason: aiComparison.reason,
-          confidenceLevel: aiComparison.confidenceLevel
+          reason: flexibilityReason || aiComparison.reason, // Use flexibility reason if available, otherwise use AI reason
+          confidenceLevel: (newEventIsImmutable || conflictingEventIsImmutable) ? 'high' : aiComparison.confidenceLevel, // High confidence when flexibility is the deciding factor
+          decidedByFlexibility: newEventIsImmutable || conflictingEventIsImmutable // Flag to indicate if flexibility was the deciding factor
         },
         recommendation: {
           action: shouldMoveNewEvent ? 'move_new_event' : 'move_existing_event',
@@ -546,19 +590,110 @@ router.post('/get-broad-options', async (req, res) => {
     }
 
     const duration = calculateEventDuration(event.Event_Start_Date, event.Event_End_Date);
-    const allEvents = await Event.find({
-      User_Email: email,
-      ID: { $ne: eventId }
-    });
-
-    // Get top 3 alternative days
-    // Get original event date
+    
+    // Get all events from Google Calendar (source of truth) for the search period
+    // Search from original event date to 14 days ahead
     const originalDate = new Date(event.Event_Start_Date);
+    const searchStart = new Date(originalDate);
+    searchStart.setHours(0, 0, 0, 0);
+    const searchEnd = new Date(originalDate);
+    searchEnd.setDate(searchEnd.getDate() + 14);
+    searchEnd.setHours(23, 59, 59, 999);
+
+    console.log(`📅 Fetching events from Google Calendar from ${searchStart.toDateString()} to ${searchEnd.toDateString()}`);
+    
+    const calendarResult = await getCalendarEvents(
+      user.OAuth_Token,
+      searchStart.toISOString(),
+      searchEnd.toISOString()
+    );
+
+    let allEvents = [];
+    
+    if (calendarResult.success) {
+      console.log(`✅ Found ${calendarResult.events.length} events in Google Calendar`);
+      
+      const gcalEventIds = calendarResult.events.map(e => e.id).filter(id => id);
+      const dbEvents = await Event.find({
+        User_Email: email,
+        GCal_Event_ID: { $in: gcalEventIds }
+      });
+
+      const dbEventMap = new Map();
+      dbEvents.forEach(e => {
+        if (e.GCal_Event_ID) {
+          dbEventMap.set(e.GCal_Event_ID, e);
+        }
+      });
+
+      // Enrich Google Calendar events with MongoDB metadata
+      allEvents = calendarResult.events
+        .filter(gcalEvent => {
+          // Exclude the event being rescheduled
+          if (gcalEvent.id === event.GCal_Event_ID) {
+            return false;
+          }
+          return true;
+        })
+        .map(gcalEvent => {
+          const dbEvent = dbEventMap.get(gcalEvent.id);
+          
+          // Handle all-day and timed events
+          let startDate, endDate;
+          if (gcalEvent.start.date) {
+            startDate = new Date(gcalEvent.start.date);
+            startDate.setHours(0, 0, 0, 0);
+            endDate = new Date(gcalEvent.end.date);
+            endDate.setHours(0, 0, 0, 0);
+          } else {
+            startDate = new Date(gcalEvent.start.dateTime);
+            endDate = new Date(gcalEvent.end.dateTime);
+          }
+          const spansDifferentDay = startDate.toDateString() !== endDate.toDateString();
+          
+          return {
+            Event_Start_Date: startDate,
+            Event_End_Date: endDate,
+            Event_Name: gcalEvent.summary || 'Untitled Event',
+            Event_Priority: dbEvent?.Event_Priority || 2,
+            Event_Flexibility: dbEvent?.Event_Flexibility || 'Busy', // Default to Busy if no metadata
+            Event_Type: dbEvent?.Event_Type || 'other',
+            Event_Guests: gcalEvent.attendees || [],
+            GCal_Event_ID: gcalEvent.id,
+            ID: dbEvent?.ID,
+            isAllDay: !!gcalEvent.start.date || spansDifferentDay
+          };
+        });
+    } else {
+      // Fallback to MongoDB if Calendar API fails
+      console.warn('⚠️ Failed to fetch from Google Calendar, falling back to MongoDB');
+      allEvents = await Event.find({
+        User_Email: email,
+        ID: { $ne: eventId }
+      }).lean();
+      // Mark DB all-day/multi-day events best-effort
+      allEvents = allEvents.map(e => {
+        const start = new Date(e.Event_Start_Date);
+        const end = new Date(e.Event_End_Date);
+        const durationHours = (end - start) / (1000 * 60 * 60);
+        const isMidnightStart = start.getHours() === 0 && start.getMinutes() === 0 && start.getSeconds() === 0;
+        const spansDifferentDay = start.toDateString() !== end.toDateString();
+        const isAllDay = spansDifferentDay || (durationHours >= 23 && durationHours <= 25) || isMidnightStart;
+        return { ...e, isAllDay };
+      });
+    }
+
+    console.log(`📋 Using ${allEvents.length} events for slot finding (excluding event being rescheduled)`);
     
     const bestDays = findBestDaysForRescheduling(
       duration,
       allEvents,
-      { Work_Hours: {}, Bedtime: {}, No_Meeting_Zones: [], Preferred_Meeting_Windows: [] },
+      { 
+        Work_Hours: user.Work_Hours || {}, 
+        Bedtime: user.Bedtime || {}, 
+        No_Meeting_Zones: user.No_Meeting_Zones || [], 
+        Preferred_Meeting_Windows: user.Preferred_Meeting_Windows || [] 
+      },
       14, // Search next 14 days
       originalDate // Only show dates >= original date
     );
@@ -570,7 +705,12 @@ router.post('/get-broad-options', async (req, res) => {
       duration,
       event.Event_Start_Date,
       allEvents,
-      { Work_Hours: {}, Bedtime: {}, No_Meeting_Zones: [], Preferred_Meeting_Windows: [] },
+      { 
+        Work_Hours: user.Work_Hours || {}, 
+        Bedtime: user.Bedtime || {}, 
+        No_Meeting_Zones: user.No_Meeting_Zones || [], 
+        Preferred_Meeting_Windows: user.Preferred_Meeting_Windows || [] 
+      },
       { maxSlots: 3, sameDayOnly: true }
     );
 
@@ -663,7 +803,7 @@ router.post('/cancel-event', async (req, res) => {
 // @desc    Move event to manually specified time
 // @access  Private
 router.post('/move-manual', async (req, res) => {
-  const { email, eventId, newTimeSlot, userApproved = false } = req.body;
+  const { email, eventId, newTimeSlot, userApproved = false, updateTitleToTentative = false } = req.body;
 
   if (!email || !eventId || !newTimeSlot) {
     return res.status(400).json({ error: 'Email, event ID, and new time slot required' });
@@ -806,20 +946,34 @@ router.post('/move-manual', async (req, res) => {
       }
     }
 
+    // Prepare calendar update payload
+    const calendarUpdates = {
+      start: {
+        dateTime: new Date(newTimeSlot.startDateTime).toISOString(),
+        timeZone: 'America/New_York'
+      },
+      end: {
+        dateTime: new Date(newTimeSlot.endDateTime).toISOString(),
+        timeZone: 'America/New_York'
+      }
+    };
+
+    // If event has attendees and updateTitleToTentative is true, update title to "TENTATIVE: [original title]"
+    if (updateTitleToTentative && hasAttendees) {
+      const originalTitle = event.Event_Name;
+      // Only add "TENTATIVE:" prefix if it doesn't already start with it
+      if (!originalTitle.startsWith('TENTATIVE: ')) {
+        calendarUpdates.summary = `TENTATIVE: ${originalTitle}`;
+        // Also update in database
+        event.Event_Name = `TENTATIVE: ${originalTitle}`;
+      }
+    }
+
     // Update in Google Calendar (automatically notifies attendees)
     const calendarUpdate = await updateCalendarEvent(
       user.OAuth_Token,
       event.GCal_Event_ID,
-      {
-        start: {
-          dateTime: new Date(newTimeSlot.startDateTime).toISOString(),
-          timeZone: 'America/New_York'
-        },
-        end: {
-          dateTime: new Date(newTimeSlot.endDateTime).toISOString(),
-          timeZone: 'America/New_York'
-        }
-      }
+      calendarUpdates
     );
 
     if (!calendarUpdate.success) {
@@ -829,7 +983,7 @@ router.post('/move-manual', async (req, res) => {
       });
     }
 
-    // Update in database
+    // Update in database (title already updated above if needed)
     event.Event_Start_Date = new Date(newTimeSlot.startDateTime);
     event.Event_End_Date = new Date(newTimeSlot.endDateTime);
     event.Start_Time = new Date(newTimeSlot.startDateTime).toTimeString().substr(0, 5);

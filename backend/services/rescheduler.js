@@ -202,10 +202,18 @@ function findAvailableTimeSlots(
       
       console.log(`✅ Found slot: ${currentDate.toTimeString().substr(0, 5)} - ${slotEnd.toTimeString().substr(0, 5)} (score: ${score})`);
       
+      // Format date as YYYY-MM-DD using local time (not UTC) to avoid timezone issues
+      const formatDateLocal = (date) => {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+      };
+      
       slots.push({
         startDateTime: new Date(currentDate),
         endDateTime: new Date(slotEnd),
-        date: currentDate.toISOString().split('T')[0],
+        date: formatDateLocal(currentDate), // Use local date, not UTC
         startTime: currentDate.toTimeString().substr(0, 5),
         endTime: slotEnd.toTimeString().substr(0, 5),
         score: score,
@@ -326,12 +334,16 @@ function findBestDaysForRescheduling(eventDuration, existingEvents, userPreferen
   
   // Group slots by date
   for (const slot of slots) {
-    // IMPORTANT: Skip dates before the original date (PRD: cannot go in the past)
+    // IMPORTANT: Skip dates before or equal to the original date (PRD: cannot go in the past, and "another day" means different day)
     if (originalDateObj) {
-      const slotDate = new Date(slot.date);
+      // Parse date string (YYYY-MM-DD) as local date, not UTC
+      const [year, month, day] = slot.date.split('-').map(Number);
+      const slotDate = new Date(year, month - 1, day); // month is 0-indexed
       slotDate.setHours(0, 0, 0, 0);
-      if (slotDate < originalDateObj) {
-        console.log(`⏭️ Skipping ${slot.date} (before original date ${originalDateObj.toISOString().split('T')[0]})`);
+      // Exclude dates before OR equal to original date (for "move to another day", we want only future days)
+      if (slotDate <= originalDateObj) {
+        const originalDateStr = `${originalDateObj.getFullYear()}-${String(originalDateObj.getMonth() + 1).padStart(2, '0')}-${String(originalDateObj.getDate()).padStart(2, '0')}`;
+        console.log(`⏭️ Skipping ${slot.date} (before or equal to original date ${originalDateStr})`);
         continue;
       }
     }

@@ -44,12 +44,103 @@ router.post('/find-best-slot', async (req, res) => {
     // Calculate event duration
     const duration = calculateEventDuration(event.Event_Start_Date, event.Event_End_Date);
 
-    // Get other events for conflict checking
+    // Get all events from Google Calendar (source of truth) for conflict checking
     const searchDate = sameDay ? event.Event_Start_Date : new Date();
-    const events = await Event.find({
-      User_Email: email,
-      ID: { $ne: eventId }
-    });
+    const searchStart = new Date(searchDate);
+    searchStart.setHours(0, 0, 0, 0);
+    const searchEnd = new Date(searchDate);
+    if (sameDay) {
+      searchEnd.setHours(23, 59, 59, 999);
+    } else {
+      searchEnd.setDate(searchEnd.getDate() + 7);
+      searchEnd.setHours(23, 59, 59, 999);
+    }
+
+    console.log(`📅 Fetching events from Google Calendar from ${searchStart.toDateString()} to ${searchEnd.toDateString()}`);
+    
+    const { getCalendarEvents } = require('../services/calendarService');
+    const calendarResult = await getCalendarEvents(
+      user.OAuth_Token,
+      searchStart.toISOString(),
+      searchEnd.toISOString()
+    );
+
+    let events = [];
+    
+    if (calendarResult.success) {
+      console.log(`✅ Found ${calendarResult.events.length} events in Google Calendar`);
+      
+      const gcalEventIds = calendarResult.events.map(e => e.id).filter(id => id);
+      const dbEvents = await Event.find({
+        User_Email: email,
+        GCal_Event_ID: { $in: gcalEventIds }
+      });
+
+      const dbEventMap = new Map();
+      dbEvents.forEach(e => {
+        if (e.GCal_Event_ID) {
+          dbEventMap.set(e.GCal_Event_ID, e);
+        }
+      });
+
+      // Enrich Google Calendar events with MongoDB metadata
+      events = calendarResult.events
+        .filter(gcalEvent => {
+          // Exclude the event being rescheduled
+          if (gcalEvent.id === event.GCal_Event_ID) {
+            return false;
+          }
+          return true;
+        })
+        .map(gcalEvent => {
+          const dbEvent = dbEventMap.get(gcalEvent.id);
+          
+          // Handle all-day and timed events
+          let startDate, endDate;
+          if (gcalEvent.start.date) {
+            startDate = new Date(gcalEvent.start.date);
+            startDate.setHours(0, 0, 0, 0);
+            endDate = new Date(gcalEvent.end.date);
+            endDate.setHours(0, 0, 0, 0);
+          } else {
+            startDate = new Date(gcalEvent.start.dateTime);
+            endDate = new Date(gcalEvent.end.dateTime);
+          }
+          const spansDifferentDay = startDate.toDateString() !== endDate.toDateString();
+          
+          return {
+            Event_Start_Date: startDate,
+            Event_End_Date: endDate,
+            Event_Name: gcalEvent.summary || 'Untitled Event',
+            Event_Priority: dbEvent?.Event_Priority || 2,
+            Event_Flexibility: dbEvent?.Event_Flexibility || 'Busy', // Default to Busy if no metadata
+            Event_Type: dbEvent?.Event_Type || 'other',
+            Event_Guests: gcalEvent.attendees || [],
+            GCal_Event_ID: gcalEvent.id,
+            ID: dbEvent?.ID,
+            isAllDay: !!gcalEvent.start.date || spansDifferentDay
+          };
+        });
+    } else {
+      // Fallback to MongoDB if Calendar API fails
+      console.warn('⚠️ Failed to fetch from Google Calendar, falling back to MongoDB');
+      events = await Event.find({
+        User_Email: email,
+        ID: { $ne: eventId }
+      }).lean();
+      // Mark DB all-day/multi-day events best-effort
+      events = events.map(e => {
+        const start = new Date(e.Event_Start_Date);
+        const end = new Date(e.Event_End_Date);
+        const durationHours = (end - start) / (1000 * 60 * 60);
+        const isMidnightStart = start.getHours() === 0 && start.getMinutes() === 0 && start.getSeconds() === 0;
+        const spansDifferentDay = start.toDateString() !== end.toDateString();
+        const isAllDay = spansDifferentDay || (durationHours >= 23 && durationHours <= 25) || isMidnightStart;
+        return { ...e, isAllDay };
+      });
+    }
+
+    console.log(`📋 Using ${events.length} events for slot finding (excluding event being rescheduled)`);
 
     // Find best slot
     const bestSlot = findBestRescheduleSlot(
@@ -116,10 +207,98 @@ router.post('/find-alternative-days', async (req, res) => {
 
     const duration = calculateEventDuration(event.Event_Start_Date, event.Event_End_Date);
 
-    const events = await Event.find({
-      User_Email: email,
-      ID: { $ne: eventId }
-    });
+    // Get all events from Google Calendar (source of truth) for conflict checking
+    const originalDate = new Date(event.Event_Start_Date);
+    const searchStart = new Date(originalDate);
+    searchStart.setHours(0, 0, 0, 0);
+    const searchEnd = new Date(originalDate);
+    searchEnd.setDate(searchEnd.getDate() + searchDays);
+    searchEnd.setHours(23, 59, 59, 999);
+
+    console.log(`📅 Fetching events from Google Calendar from ${searchStart.toDateString()} to ${searchEnd.toDateString()}`);
+    
+    const calendarResult = await getCalendarEvents(
+      user.OAuth_Token,
+      searchStart.toISOString(),
+      searchEnd.toISOString()
+    );
+
+    let events = [];
+    
+    if (calendarResult.success) {
+      console.log(`✅ Found ${calendarResult.events.length} events in Google Calendar`);
+      
+      const gcalEventIds = calendarResult.events.map(e => e.id).filter(id => id);
+      const dbEvents = await Event.find({
+        User_Email: email,
+        GCal_Event_ID: { $in: gcalEventIds }
+      });
+
+      const dbEventMap = new Map();
+      dbEvents.forEach(e => {
+        if (e.GCal_Event_ID) {
+          dbEventMap.set(e.GCal_Event_ID, e);
+        }
+      });
+
+      // Enrich Google Calendar events with MongoDB metadata
+      events = calendarResult.events
+        .filter(gcalEvent => {
+          // Exclude the event being rescheduled
+          if (gcalEvent.id === event.GCal_Event_ID) {
+            return false;
+          }
+          return true;
+        })
+        .map(gcalEvent => {
+          const dbEvent = dbEventMap.get(gcalEvent.id);
+          
+          // Handle all-day and timed events
+          let startDate, endDate;
+          if (gcalEvent.start.date) {
+            startDate = new Date(gcalEvent.start.date);
+            startDate.setHours(0, 0, 0, 0);
+            endDate = new Date(gcalEvent.end.date);
+            endDate.setHours(0, 0, 0, 0);
+          } else {
+            startDate = new Date(gcalEvent.start.dateTime);
+            endDate = new Date(gcalEvent.end.dateTime);
+          }
+          const spansDifferentDay = startDate.toDateString() !== endDate.toDateString();
+          
+          return {
+            Event_Start_Date: startDate,
+            Event_End_Date: endDate,
+            Event_Name: gcalEvent.summary || 'Untitled Event',
+            Event_Priority: dbEvent?.Event_Priority || 2,
+            Event_Flexibility: dbEvent?.Event_Flexibility || 'Busy', // Default to Busy if no metadata
+            Event_Type: dbEvent?.Event_Type || 'other',
+            Event_Guests: gcalEvent.attendees || [],
+            GCal_Event_ID: gcalEvent.id,
+            ID: dbEvent?.ID,
+            isAllDay: !!gcalEvent.start.date || spansDifferentDay
+          };
+        });
+    } else {
+      // Fallback to MongoDB if Calendar API fails
+      console.warn('⚠️ Failed to fetch from Google Calendar, falling back to MongoDB');
+      events = await Event.find({
+        User_Email: email,
+        ID: { $ne: eventId }
+      }).lean();
+      // Mark DB all-day/multi-day events best-effort
+      events = events.map(e => {
+        const start = new Date(e.Event_Start_Date);
+        const end = new Date(e.Event_End_Date);
+        const durationHours = (end - start) / (1000 * 60 * 60);
+        const isMidnightStart = start.getHours() === 0 && start.getMinutes() === 0 && start.getSeconds() === 0;
+        const spansDifferentDay = start.toDateString() !== end.toDateString();
+        const isAllDay = spansDifferentDay || (durationHours >= 23 && durationHours <= 25) || isMidnightStart;
+        return { ...e, isAllDay };
+      });
+    }
+
+    console.log(`📋 Using ${events.length} events for slot finding (excluding event being rescheduled)`);
 
     const bestDays = findBestDaysForRescheduling(
       duration,
@@ -130,7 +309,8 @@ router.post('/find-alternative-days', async (req, res) => {
         No_Meeting_Zones: user.No_Meeting_Zones,
         Preferred_Meeting_Windows: user.Preferred_Meeting_Windows
       },
-      searchDays
+      searchDays,
+      originalDate
     );
 
     res.json({
@@ -171,10 +351,97 @@ router.post('/find-same-day-slots', async (req, res) => {
 
     const duration = calculateEventDuration(event.Event_Start_Date, event.Event_End_Date);
 
-    const events = await Event.find({
-      User_Email: email,
-      ID: { $ne: eventId }
-    });
+    // Get all events from Google Calendar (source of truth) for the same day
+    const eventDate = new Date(event.Event_Start_Date);
+    const dayStart = new Date(eventDate);
+    dayStart.setHours(0, 0, 0, 0);
+    const dayEnd = new Date(eventDate);
+    dayEnd.setHours(23, 59, 59, 999);
+
+    console.log(`📅 Fetching events from Google Calendar for ${eventDate.toDateString()}`);
+    
+    const calendarResult = await getCalendarEvents(
+      user.OAuth_Token,
+      dayStart.toISOString(),
+      dayEnd.toISOString()
+    );
+
+    let events = [];
+    
+    if (calendarResult.success) {
+      console.log(`✅ Found ${calendarResult.events.length} events in Google Calendar`);
+      
+      const gcalEventIds = calendarResult.events.map(e => e.id).filter(id => id);
+      const dbEvents = await Event.find({
+        User_Email: email,
+        GCal_Event_ID: { $in: gcalEventIds }
+      });
+
+      const dbEventMap = new Map();
+      dbEvents.forEach(e => {
+        if (e.GCal_Event_ID) {
+          dbEventMap.set(e.GCal_Event_ID, e);
+        }
+      });
+
+      // Enrich Google Calendar events with MongoDB metadata
+      events = calendarResult.events
+        .filter(gcalEvent => {
+          // Exclude the event being rescheduled
+          if (gcalEvent.id === event.GCal_Event_ID) {
+            return false;
+          }
+          return true;
+        })
+        .map(gcalEvent => {
+          const dbEvent = dbEventMap.get(gcalEvent.id);
+          
+          // Handle all-day and timed events
+          let startDate, endDate;
+          if (gcalEvent.start.date) {
+            startDate = new Date(gcalEvent.start.date);
+            startDate.setHours(0, 0, 0, 0);
+            endDate = new Date(gcalEvent.end.date);
+            endDate.setHours(0, 0, 0, 0);
+          } else {
+            startDate = new Date(gcalEvent.start.dateTime);
+            endDate = new Date(gcalEvent.end.dateTime);
+          }
+          const spansDifferentDay = startDate.toDateString() !== endDate.toDateString();
+          
+          return {
+            Event_Start_Date: startDate,
+            Event_End_Date: endDate,
+            Event_Name: gcalEvent.summary || 'Untitled Event',
+            Event_Priority: dbEvent?.Event_Priority || 2,
+            Event_Flexibility: dbEvent?.Event_Flexibility || 'Busy', // Default to Busy if no metadata
+            Event_Type: dbEvent?.Event_Type || 'other',
+            Event_Guests: gcalEvent.attendees || [],
+            GCal_Event_ID: gcalEvent.id,
+            ID: dbEvent?.ID,
+            isAllDay: !!gcalEvent.start.date || spansDifferentDay
+          };
+        });
+    } else {
+      // Fallback to MongoDB if Calendar API fails
+      console.warn('⚠️ Failed to fetch from Google Calendar, falling back to MongoDB');
+      events = await Event.find({
+        User_Email: email,
+        ID: { $ne: eventId }
+      }).lean();
+      // Mark DB all-day/multi-day events best-effort
+      events = events.map(e => {
+        const start = new Date(e.Event_Start_Date);
+        const end = new Date(e.Event_End_Date);
+        const durationHours = (end - start) / (1000 * 60 * 60);
+        const isMidnightStart = start.getHours() === 0 && start.getMinutes() === 0 && start.getSeconds() === 0;
+        const spansDifferentDay = start.toDateString() !== end.toDateString();
+        const isAllDay = spansDifferentDay || (durationHours >= 23 && durationHours <= 25) || isMidnightStart;
+        return { ...e, isAllDay };
+      });
+    }
+
+    console.log(`📋 Using ${events.length} events for slot finding (excluding event being rescheduled)`);
 
     const slots = findAvailableTimeSlots(
       duration,
@@ -302,10 +569,15 @@ router.post('/execute-solo', async (req, res) => {
 // @desc    Create and send reschedule proposal for multi-attendee event
 // @access  Private
 router.post('/propose-multi-attendee', async (req, res) => {
-  const { email, eventId, newTimeSlot, reason = '' } = req.body;
+  const { email, eventId, newTimeSlot, reason = '', eventData } = req.body;
 
-  if (!email || !eventId || !newTimeSlot) {
-    return res.status(400).json({ error: 'Email, event ID, and new time slot are required' });
+  if (!email || !newTimeSlot) {
+    return res.status(400).json({ error: 'Email and new time slot are required' });
+  }
+
+  // Either eventId or eventData must be provided
+  if (!eventId && !eventData) {
+    return res.status(400).json({ error: 'Either event ID or event data is required' });
   }
 
   try {
@@ -314,24 +586,39 @@ router.post('/propose-multi-attendee', async (req, res) => {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    const event = await Event.findOne({ ID: eventId, User_Email: email });
-    if (!event) {
-      return res.status(404).json({ error: 'Event not found' });
+    // Use provided eventData or fetch from database
+    let event;
+    if (eventData) {
+      // Use provided event data (for cases where event was already deleted)
+      event = eventData;
+    } else {
+      event = await Event.findOne({ ID: eventId, User_Email: email });
+      if (!event) {
+        return res.status(404).json({ error: 'Event not found' });
+      }
     }
 
     if (!event.Event_Guests || event.Event_Guests.length === 0) {
       return res.status(400).json({ error: 'This event has no attendees' });
     }
 
+    // Ensure dates are Date objects for proposal and email
+    const originalStart = event.Event_Start_Date instanceof Date 
+      ? event.Event_Start_Date 
+      : new Date(event.Event_Start_Date);
+    const originalEnd = event.Event_End_Date instanceof Date 
+      ? event.Event_End_Date 
+      : new Date(event.Event_End_Date);
+
     // Create reschedule proposal
     const proposal = new RescheduleProposal({
       Proposal_ID: `prop_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       User_Email: email,
-      Event_ID: eventId,
+      Event_ID: eventId || 'deleted_event', // Use 'deleted_event' if eventId is not available
       Event_Name: event.Event_Name,
       Original_Time_Slot: {
-        startDateTime: event.Event_Start_Date,
-        endDateTime: event.Event_End_Date
+        startDateTime: originalStart,
+        endDateTime: originalEnd
       },
       Proposed_Time_Slot: newTimeSlot,
       Reason: reason,
@@ -347,8 +634,8 @@ router.post('/propose-multi-attendee', async (req, res) => {
       user.OAuth_Token,
       event,
       {
-        startDateTime: event.Event_Start_Date,
-        endDateTime: event.Event_End_Date
+        startDateTime: originalStart,
+        endDateTime: originalEnd
       },
       newTimeSlot,
       reason
