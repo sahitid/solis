@@ -33,20 +33,6 @@ npm run dev
 3. Click "Load unpacked" → Select `frontend/extension/` folder
 4. Update `manifest.json` with your Google OAuth Client ID
 
----
-
-## Documentation
-
-**Getting Started:**
-- [FRONTEND_INTEGRATION_COMPLETE.md](FRONTEND_INTEGRATION_COMPLETE.md) - Complete user guide
-- [RESCHEDULE_QUICK_START.md](RESCHEDULE_QUICK_START.md) - Rescheduling quick start
-
-**Technical Docs:**
-- [RESCHEDULING_SYSTEM.md](RESCHEDULING_SYSTEM.md) - API reference
-- [REFACTOR_SUMMARY.md](REFACTOR_SUMMARY.md) - Recent changes
-
----
-
 ## What It Does
 
 **Chrome Extension:**
@@ -170,8 +156,6 @@ Users are auto-created on first login:
 - OAuth now in Chrome extension
 - Login required before use
 - Auto-create user on first login
-
-See [REFACTOR_SUMMARY.md](REFACTOR_SUMMARY.md) for details.
 
 ---
 
